@@ -1,0 +1,11 @@
+[package]
+name = "vk_ray3d"
+version = "0.1.0"
+authors = ["Valink16 <valuthyk@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+compute_vk = { path = "./compute_vk" }
+nalgebra-glm = "0.11.0"
