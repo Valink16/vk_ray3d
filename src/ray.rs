@@ -1,7 +1,7 @@
 use std::iter::Iterator;
 use crate::winit::dpi::PhysicalSize;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct Ray {
 	origin: [f32; 4],
 	dir: [f32; 4],
@@ -35,12 +35,12 @@ impl Iterator for RayIter {
 		let y = (self.i / self.size.width) as f32 - (self.size.height as f32 / 2.0);
 
 		let norm = (x * x + y * y + self.depth * self.depth).sqrt();
-		let dir = [x / norm, y / norm, self.depth / norm, 1.0];
+		let dir = [x / norm, y / norm, self.depth / norm, 0.0];
 
 		self.i += 1;
 
 		Some(Ray {
-			origin: [0.0; 4],
+			origin: [0.0, 0.0, 0.0, 1.0],
 			dir,
 		})
 	}

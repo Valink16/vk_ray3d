@@ -1,16 +1,19 @@
 use nalgebra_glm::{Vec4, Vec3};
+#[derive(Debug, Copy, Clone)]
 pub struct Sphere {
 	pub pos: [f32; 4],
-	pub col: [f32; 3],
-	pub r: f32
+	pub col: [f32; 4],
+	pub r: f32,
+	_pad: [f32; 3]
 }
 
 impl Sphere {
-	pub fn new(pos: [f32; 4], col: [f32; 3], r: f32) -> Self {
+	pub fn new(pos: [f32; 4], col: [f32; 4], r: f32) -> Self {
 		Self {
 			pos,
 			col,
-			r
+			r,
+			_pad: [0.0; 3]
 		}
 	}
 }
@@ -42,8 +45,9 @@ impl Iterator for SphereIter {
 
 		let pos = [-(delta_dist) * (self.len as f32 / 2.0) + 1.0 + self.i as f32 * delta_dist, 0.0, 10.0, 1.0];
 		
-		let mut color = Vec3::new(pos[0], pos[1], pos[2]);
-		color.normalize_mut();
+		// let mut color = Vec4::new(pos[0].abs(), 0.0, pos[2] / 20.0, 1.0);
+		// color.normalize_mut();
+		let color = [1.0, 1.0, 1.0, 1.0];
 
 		println!("{:?}", pos);
 

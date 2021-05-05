@@ -22,17 +22,18 @@ use winit::event::{Event, WindowEvent};
 use winit::dpi::{Size, PhysicalSize};
 
 use std::{hash::Hash, iter::Inspect, marker::PhantomData, sync::Arc};
-use std::time::{Instant};
+use std::time::{Instant, Duration};
 
 // This class will manage the window and present the output of the compute shaders
-pub struct Canvas<Ds, DsBuilder> where
+pub struct Canvas<Ds, Update, DsBuilder> where
 	Ds: DescriptorSet + DescriptorSetDesc + DeviceOwned + Eq + Hash + PartialEq + Send + Sync,
-	DsBuilder: FnOnce(PhysicalSize<u32>, Arc<Device>, Arc<Queue>, Arc<UnsafeDescriptorSetLayout>) -> (Arc<Ds>, Arc<StorageImage<Format>>, [u32; 3]) + Clone { // DsBuilder is a closure which builds the DescriptorSet
+	Update: FnMut(winit::event::Event<()>) -> bool,
+	DsBuilder: FnOnce(PhysicalSize<u32>, Arc<Device>, Arc<Queue>, Arc<UnsafeDescriptorSetLayout>) -> (Arc<Ds>, Arc<StorageImage<Format>>, [u32; 3], Update) + Clone { // DsBuilder is a closure which builds the DescriptorSet
 	// TODO: 
 	// - implement the class, must be able to create the window, manage events, draw output
 	// - take potential multiple compute shaders with their corresponding descriptor sets + input data + output texture
 	ds_builder: DsBuilder, // A closure used by `Canvas` to build the input for the compute shader
-
+	
 	// Vulkan specific attributes
 	instance: Arc<Instance>,
 	pub device: Arc<Device>,
@@ -41,9 +42,10 @@ pub struct Canvas<Ds, DsBuilder> where
 	pub shader: Option<loader::Shader>,
 }
 
-impl<Ds: 'static, DsBuilder: 'static> Canvas<Ds, DsBuilder> where 
+impl<Ds: 'static, Update: 'static, DsBuilder: 'static> Canvas<Ds, Update, DsBuilder> where 
 	Ds: DescriptorSet + DescriptorSetDesc + DeviceOwned + Eq + Hash + PartialEq + Send + Sync,
-	DsBuilder: FnOnce(PhysicalSize<u32>, Arc<Device>, Arc<Queue>, Arc<UnsafeDescriptorSetLayout>) -> (Arc<Ds>, Arc<StorageImage<Format>>, [u32; 3]) + Clone {
+	Update: FnMut(winit::event::Event<()>) -> bool,
+	DsBuilder: FnOnce(PhysicalSize<u32>, Arc<Device>, Arc<Queue>, Arc<UnsafeDescriptorSetLayout>) -> (Arc<Ds>, Arc<StorageImage<Format>>, [u32; 3], Update) + Clone {
 	
 	/// #### ds_builder closure arguments
 	/// - `PhysicalSize` representing the size of the swapchain and returning a tuple containing the descriptor set for the compute shader and the output image
@@ -54,6 +56,11 @@ impl<Ds: 'static, DsBuilder: 'static> Canvas<Ds, DsBuilder> where
 	/// - `Arc<Ds>` The descriptor set
 	/// - `Arc<StorageImage<Format>>` A storage image which will be shown on screen
 	/// - `[u32; 3]` Size of the dispatch
+	/// - `Update` Closure
+	/// 	- arguments
+	///			- `Option<winit::event::WindowEvent` The window event of the current frame
+	///		- return
+	///			- 'bool' rebuild, used to communicate whether ds_builder should be recalled or not
 	pub fn new(window_size: PhysicalSize<u32>, ds_builder: DsBuilder, app_info: &ApplicationInfo) -> Self {
 		let (instance, device, queue) = util::init_vulkano(app_info);
 
@@ -110,13 +117,13 @@ impl<Ds: 'static, DsBuilder: 'static> Canvas<Ds, DsBuilder> where
 				&queue,
 				SurfaceTransform::Identity,
 				alpha_behavior,
-				PresentMode::Fifo,
+				PresentMode::Immediate,
 				FullscreenExclusive::Default,
 				false,
 				color_space
 			).unwrap()
 		};
-		println!("Created swapchain with {} images", images.len());
+		println!("Created swapchain with {} images using format {:?}", images.len(), swapchain.format());
 
 		// setting up the compute pipeline
 		let compute_pipeline = Arc::new(ComputePipeline::new(
@@ -128,7 +135,7 @@ impl<Ds: 'static, DsBuilder: 'static> Canvas<Ds, DsBuilder> where
 
 		let layout = compute_pipeline.layout().descriptor_set_layout(0).unwrap().to_owned();
 
-		let (mut descriptor_set, mut output_img, mut dispatch) = (ds_builder.clone())(surface.window().inner_size(), device.clone(), queue.clone(), layout.clone());
+		let (mut descriptor_set, mut output_img, mut dispatch, mut update) = (ds_builder.clone())(surface.window().inner_size(), device.clone(), queue.clone(), layout.clone());
 		// let mut descriptor_set = Arc::new();
 
 		let (mut dest_dim, mut output_dim, scale) = {
@@ -148,32 +155,35 @@ impl<Ds: 'static, DsBuilder: 'static> Canvas<Ds, DsBuilder> where
 		let mut minimized = false;
 		let mut previous_frame_end = Some(sync::now(device.clone()).boxed());
 		let mut start = Instant::now();
+		let mut compute_start = Instant::now();
+		let mut compute_elapsed = Duration::new(0, 0); // Very approximative compute time measurement
 		let mut frames = 0;
 		let dt_log_rate = 300;
 
-		event_loop.run(move |event, _, control_flow| {
+		event_loop.run(move |ev, _, control_flow| {
 			frames += 1;
 
 			if frames % dt_log_rate == 0 {
 				frames = 0;
 				let elapsed = start.elapsed();
 				start = Instant::now();
-				println!("Frame time: {}ms, FPS: {}", elapsed.as_secs_f32() * 1000.0 / dt_log_rate as f32, dt_log_rate as f32 / elapsed.as_secs_f32());
-				
+				println!("Frame time: {}ms, FPS: {}, Compute time: {}ms", elapsed.as_secs_f32() * 1000.0 / dt_log_rate as f32, dt_log_rate as f32 / elapsed.as_secs_f32(),(compute_elapsed.as_secs_f32() * 1000.0) / dt_log_rate as f32);
+				compute_elapsed = Duration::new(0, 0);
 			}
 
-			match event {
-				Event::WindowEvent {
-					event: WindowEvent::CloseRequested,
-					.. } => {
-					*control_flow = ControlFlow::Exit;
+			match ev {
+				Event::WindowEvent { event, .. } => {
+					match event {
+						WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+						WindowEvent::Resized(s) => {
+							resized = true;
+							minimized = s.width == 0 || s.height == 0;
+						},
+						_ => {
+							()
+						}
+					}
 				}
-				Event::WindowEvent {
-					event: WindowEvent::Resized(s),
-					.. } => {
-					resized = true;
-					minimized = s.width == 0 || s.height == 0;
-				},
 				Event::RedrawEventsCleared => {
 					if minimized { return; } // Don't try anything if the window is minimized, this prevents the errors when creating images with 0 sizes
 
@@ -202,7 +212,7 @@ impl<Ds: 'static, DsBuilder: 'static> Canvas<Ds, DsBuilder> where
 						descriptor_set = r.0;
 						output_img = r.1;
 						dispatch = r.2;
-
+						update = r.3;
 
 						dest_dim = [_dest_dim.width() as i32, _dest_dim.height() as i32, 1];
 						output_dim = [_output_dim[0] as i32, _output_dim[1] as i32, 1];
@@ -245,16 +255,25 @@ impl<Ds: 'static, DsBuilder: 'static> Canvas<Ds, DsBuilder> where
 
 					let cb = cb_builder.build().unwrap();
 					
-					let future = previous_frame_end
+					let _future = previous_frame_end
 						.take().unwrap()
-						.join(acquire_future)
-						.then_execute(queue.clone(), cb).unwrap()
+						.join(acquire_future);
+					
+					compute_start = Instant::now();
+					let future = _future.then_execute(queue.clone(), cb).unwrap()
 						.then_swapchain_present(queue.clone(), swapchain.clone(), swap_index)
 						.then_signal_fence_and_flush();
 					
 					match future {
 						Ok(future) => {
+							future.wait(None).unwrap();
+
+							if update(ev) {
+								resized = true;
+							}
+
 							previous_frame_end = Some(future.boxed());
+							compute_elapsed += compute_start.elapsed();
 						},
 						Err(vulkano::sync::FlushError::OutOfDate) => {
 							resized = true;
@@ -262,7 +281,7 @@ impl<Ds: 'static, DsBuilder: 'static> Canvas<Ds, DsBuilder> where
 						},
 						Err(e) => println!("Failed to flush future: {:?}", e)
 					}
-				}
+				},
 				_ => ()
 			}
 		})
