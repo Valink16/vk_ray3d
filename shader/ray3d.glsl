@@ -31,7 +31,13 @@ layout(set = 0, binding = 3, std430) buffer PointLights {
     PointLight point_lights[];
 };
 
+layout(push_constant) uniform Camera {
+    vec4 pos;
+    vec4 orientation; // Quaternion
+} camera;
+
 #include "consts.glsl"
+#include "quaternion.glsl"
 #include "sphere.glsl"
 #include "light.glsl"
 
@@ -39,6 +45,14 @@ void main() {
     ivec2 img_size = imageSize(img);
     uint ri = gl_GlobalInvocationID.y * img_size.x + gl_GlobalInvocationID.x;
     Ray r = rays[ri];
+
+    if (length(camera.pos) == 0.1) {
+        imageStore(img, ivec2(gl_GlobalInvocationID.xy), vec4(1.0));
+        return;
+    }
+
+    r.origin += camera.pos;
+    r.dir.xyz = transform_point(camera.orientation, r.dir.xyz);
 
     vec4 col = vec4(0.0, 0.0, 0.0, 1.0);
 
@@ -48,8 +62,9 @@ void main() {
     if (closest_si != SPHERES_LENGTH) {
         Sphere closest_s = spheres[closest_si];
         vec4 impact_point = r.origin + r.dir * closest_d;
-        float df = 1 / (closest_d * closest_d);
-        col = vec4(PointLights_to_Sphere(impact_point, closest_s, r), 1.0) * df;
+        // float df = 1 / (closest_d * closest_d);
+        // col = vec4(PointLights_to_Sphere(impact_point, closest_s, r), 1.0) * df;
+        col = vec4(PointLights_to_Sphere(impact_point, closest_s, r), 1.0);
 
         // col = spheres[closest_si].col;
     }

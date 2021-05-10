@@ -32,7 +32,7 @@ vec3 PointLights_to_Sphere(vec4 impact_point, Sphere closest_s, Ray r) {
 			*/
 
 			vec4 normal = normalize(impact_point - closest_s.pos);
-			float diffusion_factor = dot(normal, to_light) / length(to_light);
+			float diffusion_factor = clamp(dot(normal, to_light) / length(to_light), 0.2, 1.0);
 
 			float distance_factor = (1 / to_light_sq_dist); // df is the distance factor, light intensity is proportional to the inverse of the distance squared
 			final_color += light.col * light.intensity * distance_factor * diffusion_factor;

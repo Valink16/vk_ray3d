@@ -16,7 +16,6 @@ use vulkano::descriptor::descriptor_set::UnsafeDescriptorSetLayout;
 use vulkano::descriptor::pipeline_layout::PipelineLayout;
 use vulkano::descriptor::pipeline_layout::PipelineLayoutDesc;
 use vulkano::descriptor::pipeline_layout::PipelineLayoutDescPcRange;
-use vulkano::pipeline::shader::SpecializationConstants as SpecConstsTrait;
 use vulkano::pipeline::shader::SpecializationMapEntry; 
 
 use shaderc;
@@ -30,7 +29,8 @@ pub struct Shader {
 } 
 
 impl Shader {
-    #[doc = r" Loads the shader in Vulkan as a `ShaderModule`."] #[inline]
+    #[doc = r" Loads the shader in Vulkan as a `ShaderModule`."]
+    #[inline]
     #[allow(unsafe_code)] pub fn
     load(device: std::sync::Arc<vulkano::device::Device>, filename: &str, layout: MainLayout) -> Result<Shader, String> {
         if !device.enabled_features().shader_storage_image_extended_formats {
@@ -54,7 +54,6 @@ impl Shader {
         let mut compile_options = shaderc::CompileOptions::new().unwrap();
         compile_options.set_include_callback(|requested_name, include_type, requesting_name, _depth| {
 
-            let path = RelativePath::new(requested_name);
             let requesting_path = RelativePath::new(requesting_name);
 
             let filename = match include_type {
@@ -186,18 +185,18 @@ impl ExactSizeIterator for MainOutputIter { }
 pub struct MainLayout {
     pub stages: ShaderStages,
     pub sets: Vec<Vec<DescriptorDesc>>,
+    pub push_constants_ranges: Vec<PipelineLayoutDescPcRange>
 }
 
 impl MainLayout {
     pub fn new() -> Self {
-
-
         Self {
             stages: ShaderStages {
                 compute: true,
                 .. ShaderStages::none()
             },
-            sets: Vec::<Vec<DescriptorDesc>>::new()
+            sets: Vec::<Vec<DescriptorDesc>>::new(),
+            push_constants_ranges: Vec::<PipelineLayoutDescPcRange>::new()
         }
     }
 
@@ -241,12 +240,21 @@ impl MainLayout {
         }
         self.sets[set as usize].push(desc)
     }
+
+    pub fn add_push_constant_range(&mut self, offset: usize, size: usize) {
+        self.push_constants_ranges.push(PipelineLayoutDescPcRange {
+            offset,
+            size,
+            stages: ShaderStages::compute()
+        });
+    }
 }
 
 #[allow(unsafe_code)]
 unsafe impl PipelineLayoutDesc for MainLayout {
-    fn num_sets(& self) -> usize { self.sets.len() }
-	fn num_bindings_in_set(& self, set : usize) -> Option <usize> { 
+    fn num_sets(&self) -> usize { self.sets.len() }
+
+	fn num_bindings_in_set(&self, set: usize) -> Option<usize> { 
         match self.sets.get(set) {
             Some(s) => Some(s.len()),
             None => None
@@ -262,35 +270,12 @@ unsafe impl PipelineLayoutDesc for MainLayout {
         }
     }
 	
-	fn num_push_constants_ranges(&self) -> usize { 0usize }
+	fn num_push_constants_ranges(&self) -> usize { self.push_constants_ranges.len() }
+
 	fn push_constants_range(&self, num: usize) -> Option<PipelineLayoutDescPcRange> {
-        /*
-        if num != 0 || 0usize == 0 { None } 
-		else {
-            Some(PipelineLayoutDescPcRange {
-				offset : 0, size : 0usize, stages : ShaderStages ::
-				all(),
-			})
+        match self.push_constants_ranges.get(num) {
+            None => None,
+            Some(r) => Some(*r)
         }
-        */
-        None // Don't plan to use constants for now
-    }
-} 
-
-pub mod ty { } 
-
-#[derive(Debug, Copy, Clone)]
-#[allow(non_snake_case)]
-#[repr(C)]
-pub struct SpecializationConstants { } 
-
-impl Default for SpecializationConstants {
-	fn default() -> SpecializationConstants { SpecializationConstants { } }
-}
-
-unsafe impl SpecConstsTrait for SpecializationConstants {
-    fn descriptors() -> &'static [SpecializationMapEntry] {
-        static DESCRIPTORS: [SpecializationMapEntry; 0usize] = [];
-		&DESCRIPTORS
     }
 }

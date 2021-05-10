@@ -32,7 +32,7 @@ impl Iterator for RayIter {
 		}
 
 		let x = (self.i % self.size.width) as f32 - (self.size.width as f32 / 2.0);
-		let y = (self.i / self.size.width) as f32 - (self.size.height as f32 / 2.0);
+		let y = -((self.i / self.size.width) as f32 - (self.size.height as f32 / 2.0));
 
 		let norm = (x * x + y * y + self.depth * self.depth).sqrt();
 		let dir = [x / norm, y / norm, self.depth / norm, 0.0];

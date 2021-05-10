@@ -1,5 +1,5 @@
 use crate::{util, loader};
-use vulkano::{descriptor::{DescriptorSet, descriptor_set::DescriptorSetDesc}, device::{Device, DeviceOwned, Queue}, pipeline::shader::SpecializationConstants};
+use vulkano::{descriptor::{DescriptorSet, descriptor_set::DescriptorSetDesc}, device::{Device, DeviceOwned, Queue}};
 use vulkano::instance::{Instance, ApplicationInfo};
 use vulkano::image::{StorageImage, ImageUsage, ImageCreateFlags, ImageDimensions, view::ImageView, ImageAccess};
 use vulkano::format::{Format, ClearValue};
@@ -7,7 +7,7 @@ use vulkano::command_buffer::{AutoCommandBuffer, AutoCommandBufferBuilder, Comma
 use vulkano::sampler::Filter;
 use vulkano::sync::GpuFuture;
 use vulkano::buffer::{CpuAccessibleBuffer, BufferUsage};
-use vulkano::pipeline::{ComputePipeline, shader::EntryPointAbstract};
+use vulkano::pipeline::{ComputePipeline, shader::EntryPointAbstract, shader::SpecializationConstants};
 use vulkano::descriptor::{descriptor_set::{PersistentDescriptorSet, UnsafeDescriptorSetLayout}, PipelineLayoutAbstract};
 
 use vulkano::swapchain;
@@ -21,13 +21,16 @@ use winit::event_loop::{EventLoop, ControlFlow};
 use winit::event::{Event, WindowEvent};
 use winit::dpi::{Size, PhysicalSize};
 
-use std::{hash::Hash, iter::Inspect, marker::PhantomData, sync::Arc};
+use std::{hash::Hash, iter::Inspect, marker::PhantomData};
+use std::sync::Arc;
 use std::time::{Instant, Duration};
+use std::fmt::Debug;
 
 // This class will manage the window and present the output of the compute shaders
-pub struct Canvas<Ds, Update, DsBuilder> where
+pub struct Canvas<Ds, Update, Pc: 'static, DsBuilder> where
 	Ds: DescriptorSet + DescriptorSetDesc + DeviceOwned + Eq + Hash + PartialEq + Send + Sync,
-	Update: FnMut(winit::event::Event<()>) -> bool,
+	Update: FnMut(Option<&winit::event::Event<()>>) -> (Pc, bool),
+	Pc: SpecializationConstants + Copy + Debug,
 	DsBuilder: FnOnce(PhysicalSize<u32>, Arc<Device>, Arc<Queue>, Arc<UnsafeDescriptorSetLayout>) -> (Arc<Ds>, Arc<StorageImage<Format>>, [u32; 3], Update) + Clone { // DsBuilder is a closure which builds the DescriptorSet
 	// TODO: 
 	// - implement the class, must be able to create the window, manage events, draw output
@@ -42,9 +45,10 @@ pub struct Canvas<Ds, Update, DsBuilder> where
 	pub shader: Option<loader::Shader>,
 }
 
-impl<Ds: 'static, Update: 'static, DsBuilder: 'static> Canvas<Ds, Update, DsBuilder> where 
+impl<Ds: 'static, Update: 'static, Pc, DsBuilder: 'static> Canvas<Ds, Update, Pc, DsBuilder> where 
 	Ds: DescriptorSet + DescriptorSetDesc + DeviceOwned + Eq + Hash + PartialEq + Send + Sync,
-	Update: FnMut(winit::event::Event<()>) -> bool,
+	Update: FnMut(Option<&winit::event::Event<()>>) -> (Pc, bool),
+	Pc: SpecializationConstants + Copy + Debug,
 	DsBuilder: FnOnce(PhysicalSize<u32>, Arc<Device>, Arc<Queue>, Arc<UnsafeDescriptorSetLayout>) -> (Arc<Ds>, Arc<StorageImage<Format>>, [u32; 3], Update) + Clone {
 	
 	/// #### ds_builder closure arguments
@@ -52,7 +56,7 @@ impl<Ds: 'static, Update: 'static, DsBuilder: 'static> Canvas<Ds, Update, DsBuil
 	/// - `Arc<Device>`
 	/// - `Arc<Queue>`
 	/// - `Arc<UnsafeDescriptorSetLayout>` should be used to build your descriptor sets
-	/// #### ds_builder return
+	/// #### ds_builder closure return
 	/// - `Arc<Ds>` The descriptor set
 	/// - `Arc<StorageImage<Format>>` A storage image which will be shown on screen
 	/// - `[u32; 3]` Size of the dispatch
@@ -61,6 +65,12 @@ impl<Ds: 'static, Update: 'static, DsBuilder: 'static> Canvas<Ds, Update, DsBuil
 	///			- `Option<winit::event::WindowEvent` The window event of the current frame
 	///		- return
 	///			- 'bool' rebuild, used to communicate whether ds_builder should be recalled or not
+	/// #### Update closure arguments
+	/// - `Option<winit::event::Event>` Event passed to the closure so the user can update accordingly, needs to be passed back to avoid a weird winit bug (can't clone `Event`)
+	/// #### Update closure return
+	/// - `Option<winit::event::Event<()>>` The same event as the one passed in
+	/// - `Pc` push_constant implementing the `SpecializationConstants` trait
+	/// - `bool` Indicates whether the ds_builder needs to be recalled or not
 	pub fn new(window_size: PhysicalSize<u32>, ds_builder: DsBuilder, app_info: &ApplicationInfo) -> Self {
 		let (instance, device, queue) = util::init_vulkano(app_info);
 
@@ -136,7 +146,6 @@ impl<Ds: 'static, Update: 'static, DsBuilder: 'static> Canvas<Ds, Update, DsBuil
 		let layout = compute_pipeline.layout().descriptor_set_layout(0).unwrap().to_owned();
 
 		let (mut descriptor_set, mut output_img, mut dispatch, mut update) = (ds_builder.clone())(surface.window().inner_size(), device.clone(), queue.clone(), layout.clone());
-		// let mut descriptor_set = Arc::new();
 
 		let (mut dest_dim, mut output_dim, scale) = {
 			let _dest_dim = images[0].dimensions().width_height();
@@ -155,20 +164,17 @@ impl<Ds: 'static, Update: 'static, DsBuilder: 'static> Canvas<Ds, Update, DsBuil
 		let mut minimized = false;
 		let mut previous_frame_end = Some(sync::now(device.clone()).boxed());
 		let mut start = Instant::now();
-		let mut compute_start = Instant::now();
-		let mut compute_elapsed = Duration::new(0, 0); // Very approximative compute time measurement
 		let mut frames = 0;
 		let dt_log_rate = 300;
+		let (mut push_constants, mut need_update) = update(None);
 
-		event_loop.run(move |ev, _, control_flow| {
-			frames += 1;
+		event_loop.run(move |mut ev: Event<()>, _, control_flow| {
+			let update_res = update(Some(&ev));
+			push_constants = update_res.0;
+			need_update = update_res.1;
 
-			if frames % dt_log_rate == 0 {
-				frames = 0;
-				let elapsed = start.elapsed();
-				start = Instant::now();
-				println!("Frame time: {}ms, FPS: {}, Compute time: {}ms", elapsed.as_secs_f32() * 1000.0 / dt_log_rate as f32, dt_log_rate as f32 / elapsed.as_secs_f32(),(compute_elapsed.as_secs_f32() * 1000.0) / dt_log_rate as f32);
-				compute_elapsed = Duration::new(0, 0);
+			if need_update {
+				resized = true;
 			}
 
 			match ev {
@@ -185,7 +191,16 @@ impl<Ds: 'static, Update: 'static, DsBuilder: 'static> Canvas<Ds, Update, DsBuil
 					}
 				}
 				Event::RedrawEventsCleared => {
-					if minimized { return; } // Don't try anything if the window is minimized, this prevents the errors when creating images with 0 sizes
+					frames += 1;
+
+					if frames % dt_log_rate == 0 {
+						frames = 0;
+						let elapsed = start.elapsed();
+						start = Instant::now();
+						println!("Frame time: {}ms, FPS: {}", elapsed.as_secs_f32() * 1000.0 / dt_log_rate as f32, dt_log_rate as f32 / elapsed.as_secs_f32());
+					}
+
+					if minimized { return; } // Don't try anything if the window is minimized, this prevents the errors creating images with 0 sizes
 
 					previous_frame_end.as_mut().unwrap().cleanup_finished();
 
@@ -237,7 +252,7 @@ impl<Ds: 'static, Update: 'static, DsBuilder: 'static> Canvas<Ds, Update, DsBuil
 					
 					cb_builder
 						.clear_color_image(output_img.clone(), ClearValue::Float([0.0, 0.0, 0.0, 1.0])).unwrap()
-						.dispatch(dispatch, compute_pipeline.clone(), descriptor_set.clone(), (), std::iter::empty()).unwrap()
+						.dispatch(dispatch, compute_pipeline.clone(), descriptor_set.clone(), push_constants, std::iter::empty()).unwrap()
 						.blit_image(
 								output_img.clone(),
 								[0, 0, 0],
@@ -259,7 +274,6 @@ impl<Ds: 'static, Update: 'static, DsBuilder: 'static> Canvas<Ds, Update, DsBuil
 						.take().unwrap()
 						.join(acquire_future);
 					
-					compute_start = Instant::now();
 					let future = _future.then_execute(queue.clone(), cb).unwrap()
 						.then_swapchain_present(queue.clone(), swapchain.clone(), swap_index)
 						.then_signal_fence_and_flush();
@@ -267,13 +281,7 @@ impl<Ds: 'static, Update: 'static, DsBuilder: 'static> Canvas<Ds, Update, DsBuil
 					match future {
 						Ok(future) => {
 							future.wait(None).unwrap();
-
-							if update(ev) {
-								resized = true;
-							}
-
 							previous_frame_end = Some(future.boxed());
-							compute_elapsed += compute_start.elapsed();
 						},
 						Err(vulkano::sync::FlushError::OutOfDate) => {
 							resized = true;
