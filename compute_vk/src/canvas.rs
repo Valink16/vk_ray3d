@@ -1,29 +1,28 @@
 use crate::{util, loader};
 use vulkano::{descriptor::{DescriptorSet, descriptor_set::DescriptorSetDesc}, device::{Device, DeviceOwned, Queue}};
 use vulkano::instance::{Instance, ApplicationInfo};
-use vulkano::image::{StorageImage, ImageUsage, ImageCreateFlags, ImageDimensions, view::ImageView, ImageAccess};
+use vulkano::image::{StorageImage, ImageUsage, ImageAccess};
 use vulkano::format::{Format, ClearValue};
-use vulkano::command_buffer::{AutoCommandBuffer, AutoCommandBufferBuilder, CommandBuffer, BlitImageError};
+use vulkano::command_buffer::AutoCommandBufferBuilder;
 use vulkano::sampler::Filter;
 use vulkano::sync::GpuFuture;
-use vulkano::buffer::{CpuAccessibleBuffer, BufferUsage};
-use vulkano::pipeline::{ComputePipeline, shader::EntryPointAbstract, shader::SpecializationConstants};
-use vulkano::descriptor::{descriptor_set::{PersistentDescriptorSet, UnsafeDescriptorSetLayout}, PipelineLayoutAbstract};
+use vulkano::pipeline::{ComputePipeline, shader::SpecializationConstants};
+use vulkano::descriptor::{descriptor_set::UnsafeDescriptorSetLayout, PipelineLayoutAbstract};
 
 use vulkano::swapchain;
-use swapchain::{Swapchain, SwapchainCreationError, SurfaceTransform, PresentMode, FullscreenExclusive, ColorSpace};
+use swapchain::{Swapchain, SwapchainCreationError, SurfaceTransform, PresentMode, FullscreenExclusive};
 
 use vulkano::sync;
 
 use vulkano_win::VkSurfaceBuild;
-use winit::window::{WindowBuilder, Window};
+use winit::window::WindowBuilder;
 use winit::event_loop::{EventLoop, ControlFlow};
 use winit::event::{Event, WindowEvent};
-use winit::dpi::{Size, PhysicalSize};
+use winit::dpi::PhysicalSize;
 
-use std::{hash::Hash, iter::Inspect, marker::PhantomData};
+use std::hash::Hash;
 use std::sync::Arc;
-use std::time::{Instant, Duration};
+use std::time::Instant;
 use std::fmt::Debug;
 
 // This class will manage the window and present the output of the compute shaders
@@ -168,7 +167,7 @@ impl<Ds: 'static, Update: 'static, Pc, DsBuilder: 'static> Canvas<Ds, Update, Pc
 		let dt_log_rate = 300;
 		let (mut push_constants, mut need_update) = update(None);
 
-		event_loop.run(move |mut ev: Event<()>, _, control_flow| {
+		event_loop.run(move |ev: Event<()>, _, control_flow| {
 			let update_res = update(Some(&ev));
 			push_constants = update_res.0;
 			need_update = update_res.1;
@@ -222,7 +221,7 @@ impl<Ds: 'static, Update: 'static, Pc, DsBuilder: 'static> Canvas<Ds, Update, Pc
 						let _dest_dim = images[0].dimensions();
 						let _output_dim = [(_dest_dim.width() as f32 / scale.0).floor() as u32, (_dest_dim.height() as f32 / scale.1).floor() as u32];
 						
-						let r = (ds_builder.clone())(surface.window().inner_size(), device.clone(), queue.clone(), layout.clone());;
+						let r = (ds_builder.clone())(surface.window().inner_size(), device.clone(), queue.clone(), layout.clone());
 						
 						descriptor_set = r.0;
 						output_img = r.1;

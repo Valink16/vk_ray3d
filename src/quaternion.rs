@@ -1,4 +1,4 @@
-use std::{f32::consts::PI, ops::Mul};
+use std::ops::Mul;
 
 use nalgebra_glm as glm;
 use glm::{Vec3, dot, cross};

@@ -1,21 +1,16 @@
 use compute_vk::{self, loader, util, vulkano, winit};
-use event::Event;
+use winit::event::Event;
 use nalgebra_glm::Vec3;
 
 use vulkano::device::Device;
 use vulkano::device::Queue;
-use vulkano::format::Format;
 use vulkano::image::view::ImageView;
 use vulkano::image::ImageDimensions;
 use vulkano::descriptor::descriptor_set::PersistentDescriptorSet;
-use vulkano::buffer::{DeviceLocalBuffer, CpuAccessibleBuffer, BufferUsage, BufferAccess};
-use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBuffer};
-use vulkano::sync::GpuFuture;
-
+use vulkano::buffer::BufferUsage;
 use winit::{dpi::PhysicalSize, event};
 
 use std::sync::Arc;
-use std::sync::Mutex;
 
 use crate::{geom::sphere::Sphere, quaternion::Quaternion};
 
@@ -39,73 +34,16 @@ fn main() {
 
         let ray_buffer = {
             let rays = ray::RayIter::new(_size, std::f32::consts::FRAC_PI_2);
-            let rays_len = rays.len();
-
-            let source = CpuAccessibleBuffer::from_iter(_device.clone(), BufferUsage::all(), false, rays)
-                .expect("Failed to create the source buffer");
-            
-            let dest = DeviceLocalBuffer::<[ray::Ray]>::array(_device.clone(), rays_len, BufferUsage::all(), vec![_queue.family()].into_iter()).unwrap();
-            
-            // Fill the device local buffer
-            let mut cb_builder = AutoCommandBufferBuilder::new(_device.clone(),  _queue.family()).unwrap();
-            cb_builder
-                .copy_buffer(source.clone(), dest.clone()).unwrap();
-            
-            let cb = cb_builder.build().unwrap();
-            let exec_future = cb.execute(_queue.clone()).unwrap();
-
-            exec_future
-                .then_signal_fence_and_flush().unwrap()
-                .wait(None).unwrap();
-
-            println!("Created {} rays using {} MB", rays_len, dest.size() / 1_000_000);
-            
-            dest
+            util::build_local_buffer(_device.clone(), _queue.clone(), BufferUsage::all(), rays).unwrap()
         };
 
         let sphere_buffer = {
-            /*
-            let sphere_count = 20.0;
-            let mut spheres: Vec<geom::sphere::Sphere> = geom::sphere::SphereIter::new(sphere_count as u32, 0.25).collect();
-            spheres.push(geom::sphere::Sphere::new(
-                [0.0, 0.0, 20.0, 1.0],
-                [0.0, 1.0, 0.0, 1.0],
-                10.0
-            ));
-            
-            */
-
             let spheres = vec![
                 Sphere::new([0.0, 0.0, 20.0, 1.0], [1.0, 1.0, 1.0, 1.0], 3.0),
                 Sphere::new([0.0, 0.0, 15.0, 1.0], [1.0, 1.0, 1.0, 1.0], 0.5),
             ];
-
-            let spheres_len = spheres.len();
     
-            let dest = CpuAccessibleBuffer::from_iter(_device.clone(), BufferUsage::all(), false, spheres.iter().copied()).unwrap();
-            
-            /*
-            let source = CpuAccessibleBuffer::from_iter(_device.clone(), BufferUsage::all(), false, spheres.iter().copied()).unwrap();
-            let dest = DeviceLocalBuffer::<[geom::Sphere]>::array(_device.clone(), spheres_len, BufferUsage::all(), vec![_queue.family()].into_iter()).unwrap();
-
-            // Fill the device local buffer
-            let mut cb_builder = AutoCommandBufferBuilder::new(_device.clone(),  _queue.family()).unwrap();
-            cb_builder
-                .copy_buffer(source.clone(), dest.clone()).unwrap();
-            
-            let cb = cb_builder.build().unwrap();
-            let exec_future = cb.execute(_queue.clone()).unwrap();
-
-            exec_future
-                .then_signal_fence_and_flush().unwrap()
-                .wait(None).unwrap();
-
-            println!("Created {} spheres using {} Bytes", spheres_len, dest.size());
-            */
-
-            println!("Created {} spheres using {} Bytes", spheres_len, dest.size());
-
-            dest
+            util::build_cpu_buffer(_device.clone(), BufferUsage::all(), spheres).unwrap()
         };
 
         let light_buffer = {
@@ -116,32 +54,7 @@ fn main() {
                 // light::PointLight::new(Vec3::new(0.0, -20.0, 20.0), Vec3::new(1.0, 1.0, 1.0), 10000.0),
             ];
 
-            let light_count = lights.len();
-
-            let dest = CpuAccessibleBuffer::from_iter(_device.clone(), BufferUsage::all(), true, lights.iter().copied()).unwrap();
-            
-            /*
-            let source = CpuAccessibleBuffer::from_iter(_device.clone(), BufferUsage::all(), true, lights.iter().copied()).unwrap();
-            let dest = DeviceLocalBuffer::<[light::PointLight]>::array(_device.clone(), light_count, BufferUsage::all(), vec![_queue.family()].into_iter()).unwrap();
-            
-            // Fill the device local buffer
-            let mut cb_builder = AutoCommandBufferBuilder::new(_device.clone(),  _queue.family()).unwrap();
-            cb_builder
-                .copy_buffer(source.clone(), dest.clone()).unwrap();
-            
-            let cb = cb_builder.build().unwrap();
-            let exec_future = cb.execute(_queue.clone()).unwrap();
-
-            exec_future
-                .then_signal_fence_and_flush().unwrap()
-                .wait(None).unwrap();
-
-            println!("Created {} spheres using {} Bytes", light_count, dest.size());
-            */
-            
-            println!("Created {} lights using {} Bytes", light_count, dest.size());
-
-            dest
+            util::build_cpu_buffer(_device.clone(), BufferUsage::all(), lights).unwrap()
         };
 
         let ds = PersistentDescriptorSet::start(_layout)
@@ -155,7 +68,6 @@ fn main() {
 
         let mut y_angle = 0.0;
         let mut x_angle = 0.0;
-        let mut frame = 0;
 
         let mut camera = camera::Camera { // Used as push constant
             pos: [0.0, 0.0, 0.0, 0.0],
@@ -170,7 +82,7 @@ fn main() {
             };
 
             match ev {
-                event::Event::DeviceEvent { event, device_id } => {
+                event::Event::DeviceEvent { event, .. } => {
                     let mut camera_movement = Vec3::new(0.0, 0.0, 0.0);
                     match event {
                         event::DeviceEvent::MouseMotion { delta } => {
@@ -201,7 +113,6 @@ fn main() {
                     camera.pos[2] += camera_vel.z;
                 },
                 event::Event::RedrawEventsCleared => { // Animation things
-                    frame += 1;
                     t += 0.001;
                     match sphere_buffer.write() {
                         Ok(mut sb) => {
@@ -213,16 +124,6 @@ fn main() {
                 },
                 _ => (),
             }
-
-            /*
-            match light_buffer.write() {
-                Ok(mut lb) => {
-                    lb[0].pos[0] = 10.0 * t.cos();
-                    lb[0].pos[1] = 10.0 * t.sin();
-                },
-                _ => ()
-            }
-            */
 
             (camera, false)
         };

@@ -1,4 +1,4 @@
-use nalgebra_glm::{Vec3, Vec4, vec3_to_vec4};
+use nalgebra_glm::{Vec3, Vec4};
 
 #[derive(Debug, Copy, Clone)]
 pub struct PointLight {
@@ -14,6 +14,24 @@ impl PointLight {
 			pos: pos.into(),
 			col: col.into(),
 			intensity
+		}
+	}
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct DirectionalLight {
+	pub direction: [f32; 4],
+	pub col: [f32; 3],
+	_pad: f32
+}
+
+impl DirectionalLight {
+	pub fn new(direction: Vec3, col: Vec3) -> Self {
+		let direction = Vec4::new(direction.x, direction.y, direction.z, 1.0);
+		Self {
+			direction: direction.into(),
+			col: col.into(),
+			_pad: 0.0
 		}
 	}
 }

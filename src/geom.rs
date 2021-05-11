@@ -1,5 +1,4 @@
 pub mod sphere {
-	use nalgebra_glm::{Vec4, Vec3};
 	#[derive(Debug, Copy, Clone)]
 	pub struct Sphere {
 		pub pos: [f32; 4],

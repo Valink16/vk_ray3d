@@ -1,5 +1,3 @@
-use std::mem::size_of;
-
 use crate::vulkano::pipeline::shader::SpecializationConstants as SpecConstsTrait;
 use crate::vulkano::pipeline::shader::SpecializationMapEntry;
 

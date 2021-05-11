@@ -1,12 +1,14 @@
-
 use vulkano::device::{Device, Queue, Features, DeviceExtensions};
-use vulkano::instance::{Instance, InstanceExtensions, PhysicalDevice, ApplicationInfo};
+use vulkano::instance::{Instance, PhysicalDevice, ApplicationInfo};
 use vulkano::image::{ImageDimensions, StorageImage, ImageUsage, ImageCreateFlags};
+use vulkano::buffer::{CpuAccessibleBuffer, DeviceLocalBuffer, BufferUsage, BufferAccess};
 use vulkano::format::{Format, ClearValue};
 use vulkano::command_buffer::{AutoCommandBufferBuilder, CommandBuffer};
 use vulkano::sync::GpuFuture;
+use vulkano::memory::Content;
 
 use std::sync::Arc;
+use std::any::type_name;
 
 pub fn init_vulkano(app_info: &ApplicationInfo) -> (Arc<Instance>, Arc<Device>, Arc<Queue>) {
 	let instance = Instance::new(
@@ -48,7 +50,6 @@ pub fn init_vulkano(app_info: &ApplicationInfo) -> (Arc<Instance>, Arc<Device>, 
 
 /// Creates the output image and returns the arc
 pub fn build_image(device: Arc<Device>, queue: Arc<Queue>, size: ImageDimensions, format: Format) -> Arc<StorageImage<Format>> {
-
 	let output = StorageImage::with_usage(
 		device.clone(),
 		size,
@@ -76,4 +77,48 @@ pub fn build_image(device: Arc<Device>, queue: Arc<Queue>, size: ImageDimensions
 		.wait(None).unwrap();
 
 	output
+}
+
+pub fn build_cpu_buffer<T>(device: Arc<Device>, usage: BufferUsage, data: T) -> Result<Arc<CpuAccessibleBuffer<[<T as IntoIterator>::Item]>>, String> where
+T: IntoIterator + 'static, T::IntoIter: ExactSizeIterator, T::Item: Content + Send + Sync + 'static {
+	let data_iter = data.into_iter();
+	let data_length = data_iter.len();
+	match CpuAccessibleBuffer::from_iter(device, usage, true, data_iter) {
+		Ok(b) => {
+			println!("Created {} {}s using {} bytes", data_length, type_name::<T::Item>(), b.size());
+			Ok(b)
+		},
+		Err(e) => Err(String::from(format!("Failed to create the cpu accessible buffer, {:?}", e)))
+	}
+}
+
+pub fn build_local_buffer<T>(device: Arc<Device>, queue: Arc<Queue>, usage: BufferUsage, data: T) -> Result<Arc<DeviceLocalBuffer<[<T as IntoIterator>::Item]>>, String> where
+T: IntoIterator + 'static, T::IntoIter: ExactSizeIterator, T::Item: Content + Copy + Send + Sync + 'static {
+	let data_iter = data.into_iter();
+	let data_length = data_iter.len();
+	match CpuAccessibleBuffer::from_iter(device.clone(), usage, true, data_iter) {
+		Ok(source) => {
+			let dest = match DeviceLocalBuffer::<[<T as IntoIterator>::Item]>::array(device.clone(), data_length, usage, vec![queue.family()].into_iter()) {
+				Ok(d) => d,
+				Err(e) => return Err(String::from(format!("Failed to create the local device buffer, {:?}", e)))
+			};
+            
+            // Fill the device local buffer
+            let mut cb_builder = AutoCommandBufferBuilder::new(device.clone(), queue.family()).unwrap();
+            cb_builder
+                .copy_buffer(source.clone(), dest.clone()).unwrap();
+            
+            let cb = cb_builder.build().unwrap();
+            let exec_future = cb.execute(queue.clone()).unwrap();
+
+            exec_future
+                .then_signal_fence_and_flush().unwrap()
+                .wait(None).unwrap();
+
+            println!("Created {} {}s using {} bytes", data_length, type_name::<T::Item>(), dest.size());
+
+			Ok(dest)
+		},
+		Err(e) => Err(String::from(format!("Failed to create the cpu accessible buffer, {:?}", e)))
+	}
 }

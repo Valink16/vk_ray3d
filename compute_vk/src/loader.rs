@@ -1,8 +1,6 @@
 /// Copy pasted from the dump from the vulkano_shader::shader macro and modified to be able to load and compile glsl code
 
-use std::{sync::Arc, usize};
-use std::vec::IntoIter as VecIntoIter;
-use vulkano::device::Device;
+use std::usize;
 use vulkano::descriptor::descriptor::DescriptorDesc; 
 use vulkano::descriptor::descriptor::DescriptorDescTy;
 use vulkano::descriptor::descriptor::DescriptorBufferDesc;
@@ -10,13 +8,8 @@ use vulkano::descriptor::descriptor::DescriptorImageDesc;
 use vulkano::descriptor::descriptor::DescriptorImageDescDimensions; 
 use vulkano::descriptor::descriptor::DescriptorImageDescArray;
 use vulkano::descriptor::descriptor::ShaderStages;
-use vulkano::descriptor::descriptor_set::DescriptorSet;
-use vulkano::descriptor::descriptor_set::UnsafeDescriptorSet; 
-use vulkano::descriptor::descriptor_set::UnsafeDescriptorSetLayout;
-use vulkano::descriptor::pipeline_layout::PipelineLayout;
 use vulkano::descriptor::pipeline_layout::PipelineLayoutDesc;
 use vulkano::descriptor::pipeline_layout::PipelineLayoutDescPcRange;
-use vulkano::pipeline::shader::SpecializationMapEntry; 
 
 use shaderc;
 use relative_path::{RelativePath, RelativePathBuf};

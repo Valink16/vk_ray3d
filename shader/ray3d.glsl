@@ -19,6 +19,11 @@ struct PointLight {
     float intensity;
 };
 
+struct DirectionalLight {
+    vec4 dir;
+    vec3 col;
+};
+
 layout(set = 0, binding = 1, std430) buffer Rays {
     Ray rays[];
 };
@@ -29,6 +34,10 @@ layout(set = 0, binding = 2, std430) buffer Spheres {
 
 layout(set = 0, binding = 3, std430) buffer PointLights {
     PointLight point_lights[];
+};
+
+layout(set = 0, binding = 4, std430) buffer DirectionalLights {
+    DirectionalLight directional_lights[];
 };
 
 layout(push_constant) uniform Camera {
