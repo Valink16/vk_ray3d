@@ -3,7 +3,7 @@ use std::{f32::consts::PI, ops::Mul};
 use nalgebra_glm as glm;
 use glm::{Vec3, dot, cross};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Quaternion {
     pub v: glm::Vec3,
     pub s: f32
@@ -62,4 +62,13 @@ impl Into<[f32; 4]> for Quaternion {
 			self.s
 		]
 	}
+}
+
+impl From<[f32; 4]> for Quaternion {
+    fn from(data: [f32; 4]) -> Self {
+        Self {
+            v: Vec3::new(data[0], data[1], data[2]),
+            s: data[3]
+        }
+    }
 }

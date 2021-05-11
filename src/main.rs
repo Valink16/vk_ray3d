@@ -17,7 +17,7 @@ use winit::{dpi::PhysicalSize, event};
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use crate::geom::sphere::Sphere;
+use crate::{geom::sphere::Sphere, quaternion::Quaternion};
 
 mod ray;
 mod geom;
@@ -28,6 +28,7 @@ mod quaternion;
 fn main() {
         let ds_builder = move |_size: PhysicalSize<u32>, _device: Arc<Device>, _queue: Arc<Queue>, _layout| {
         let scale = 1.0;
+        let camera_speed = 0.5;
         let _size = PhysicalSize::new((_size.width as f32 * scale) as u32, (_size.height as f32 * scale) as u32);
         
         let output_img = util::build_image(_device.clone(), _queue.clone(),
@@ -170,6 +171,7 @@ fn main() {
 
             match ev {
                 event::Event::DeviceEvent { event, device_id } => {
+                    let mut camera_movement = Vec3::new(0.0, 0.0, 0.0);
                     match event {
                         event::DeviceEvent::MouseMotion { delta } => {
                             x_angle += delta.1 as f32 * 0.001;
@@ -177,17 +179,30 @@ fn main() {
                         },
                         event::DeviceEvent::Key(kb_input) => {
                             dbg!(kb_input.scancode);
+                            
                             match kb_input.scancode {
-                                17 => (), // camera.pos[2] += 0.1, // W
+                                17 => camera_movement.z += camera_speed, // W
+                                31 => camera_movement.z -= camera_speed, // S
+                                30 => camera_movement.x -= camera_speed, // A
+                                32 => camera_movement.x += camera_speed, // D
                                 _ => ()
                             }
                         }
                         _ => ()
                     }
+
+                    let x_axis = Quaternion::from_axis(Vec3::new(1.0, 0.0, 0.0), x_angle);
+                    let y_axis = Quaternion::from_axis(Vec3::new(0.0, 1.0, 0.0), y_angle);
+                    let camera_quat = y_axis * x_axis;
+                    camera.orientation = camera_quat.into(); // Defining camera orientation quaternion
+                    let camera_vel = camera_quat.transform_point(camera_movement); // Moving the camera in its looking direction
+                    camera.pos[0] += camera_vel.x;
+                    camera.pos[1] += camera_vel.y;
+                    camera.pos[2] += camera_vel.z;
                 },
                 event::Event::RedrawEventsCleared => { // Animation things
                     frame += 1;
-                    t += frame as f32 / 60.0;
+                    t += 0.001;
                     match sphere_buffer.write() {
                         Ok(mut sb) => {
                             sb[1].pos[2] = t.cos() * 5.0 + 20.0;
@@ -208,14 +223,6 @@ fn main() {
                 _ => ()
             }
             */
-
-            
-
-
-            // camera.pos[2] = -5.0 + (t / 4.0).sin() * 10.0;
-            let x = quaternion::Quaternion::from_axis(Vec3::new(1.0, 0.0, 0.0), x_angle);
-            let y = quaternion::Quaternion::from_axis(Vec3::new(0.0, 1.0, 0.0), y_angle);
-            // camera.orientation = (x * y).into();
 
             (camera, false)
         };
