@@ -65,7 +65,7 @@ pub fn build_image(device: Arc<Device>, queue: Arc<Queue>, size: ImageDimensions
 		Some(queue.family())
 	).expect("Failed to create output image");
 
-	// Copy random data for debugging
+	// Copy some data for debugging
 	let mut cb_builder = AutoCommandBufferBuilder::new(device.clone(), queue.family()).unwrap();
 	cb_builder
 		.clear_color_image(output.clone(), ClearValue::Float([1.0, 0.0, 1.0, 1.0])).unwrap();
@@ -79,6 +79,7 @@ pub fn build_image(device: Arc<Device>, queue: Arc<Queue>, size: ImageDimensions
 	output
 }
 
+/// Builds and returns a `CpuAccessibleBuffer` as an `Arc` using any data that can be iterated
 pub fn build_cpu_buffer<T>(device: Arc<Device>, usage: BufferUsage, data: T) -> Result<Arc<CpuAccessibleBuffer<[<T as IntoIterator>::Item]>>, String> where
 T: IntoIterator + 'static, T::IntoIter: ExactSizeIterator, T::Item: Content + Send + Sync + 'static {
 	let data_iter = data.into_iter();
@@ -92,11 +93,12 @@ T: IntoIterator + 'static, T::IntoIter: ExactSizeIterator, T::Item: Content + Se
 	}
 }
 
+/// Builds and returns a `DeviceLocalBuffer` as an `Arc` using any data that can be iterated
 pub fn build_local_buffer<T>(device: Arc<Device>, queue: Arc<Queue>, usage: BufferUsage, data: T) -> Result<Arc<DeviceLocalBuffer<[<T as IntoIterator>::Item]>>, String> where
 T: IntoIterator + 'static, T::IntoIter: ExactSizeIterator, T::Item: Content + Copy + Send + Sync + 'static {
 	let data_iter = data.into_iter();
 	let data_length = data_iter.len();
-	match CpuAccessibleBuffer::from_iter(device.clone(), usage, true, data_iter) {
+	match CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), true, data_iter) {
 		Ok(source) => {
 			let dest = match DeviceLocalBuffer::<[<T as IntoIterator>::Item]>::array(device.clone(), data_length, usage, vec![queue.family()].into_iter()) {
 				Ok(d) => d,

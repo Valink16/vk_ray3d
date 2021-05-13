@@ -11,6 +11,8 @@ struct Sphere {
     vec4 pos;
     vec4 col;
     float r;
+    float reflexivity; // When computing reflections, factor of the incoming light reflected
+    float diffuse_factor; // When computing reflections, factor of the added diffuse light to the incoming reflected light
 };
 
 struct PointLight {
@@ -69,63 +71,52 @@ void main() {
     float closest_d = Ray_trace_to_Spheres(r, closest_si);
 
     if (closest_si != SPHERES_LENGTH) {
-        Sphere closest_s = spheres[closest_si];
-        vec4 impact_point = r.origin + r.dir * closest_d;
-        // float df = 1 / (closest_d * closest_d);
-        // col = vec4(PointLights_to_Sphere(impact_point, closest_s, r), 1.0) * df;
-        col = vec4(PointLights_to_Sphere(impact_point, closest_s, r), 1.0);
-
-        // col = spheres[closest_si].col;
-    }
-
-    /*
-        uint closest_si;
-        float closest_d;
-
-        Ray reflected = r; // Used to iterate through reflections
-
         // The following arrays store the data about the reflection to then bactrace from the last impact and find the final color
         vec4 impact_points[REFLECT_DEPTH];
         uint impact_sindices[REFLECT_DEPTH];
-        float impact_distances[REFLECT_DEPTH];
+        float impact_distance = 0.0;
+
+        Sphere closest_s = spheres[closest_si];
+        vec4 impact_point = r.origin + r.dir * closest_d;
+        vec4 normal = normalize(impact_point - closest_s.pos);
+
+        r.origin = impact_point;
+        r.dir = reflect(r.dir, normal); // Used to iterate through reflections
+        impact_points[0] = impact_point;
+        impact_sindices[0] = closest_si;
+        impact_distance += closest_d;
 
         int i; // So we can keep track of when the for loop stopped for later
-        for (i = 0; i < REFLECT_DEPTH; i++) {
-            closest_d = Ray_trace_to_Spheres(reflected, closest_si);
+        for (i = 1; i < REFLECT_DEPTH; i++) {
+            closest_d = Ray_trace_to_Spheres(r, closest_si);
             
-            if (closest_si == SPHERES_LENGTH) {
+            if (closest_si == SPHERES_LENGTH) { // No collision, so stop the loop, because the ray "goes" into infinity
                 break;
             }
 
-            impact_points[i] = reflected.origin + reflected.dir * closest_d;
+            impact_points[i] = r.origin + r.dir * closest_d;
             impact_sindices[i] = closest_si;
-            impact_distances[i] = closest_d;
+            impact_distance += closest_d;
             
-            vec4 normal = normalize(impact_points[i] - spheres[closest_si].pos);
-
-            reflected = Ray (
-                impact_points[i], // The new origin is the current impact point
-                reflect(-reflected.dir, normal)
-            );
+            normal = normalize(impact_points[i] - spheres[closest_si].pos);
+            r.origin = impact_points[i]; // New origin is the impact point
+            r.dir = reflect(r.dir, normal); // Used to iterate through reflections
         }
-        
-        if (i > 0) { // Means the ray collided at least once
+
+        if (i > 0) {
             --i; // or index out of range
 
-            Sphere closest_s = spheres[impact_sindices[i]];
-            vec4 impact_point = impact_points[i];
-            vec3 diffused_color = PointLights_to_Sphere(impact_points[i], closest_s, reflected);
+            vec3 reflected_color = PointLights_to_Sphere(impact_points[i], spheres[impact_sindices[i]], r) * spheres[impact_sindices[i]].reflexivity; // This is the color on the "last" impact, we'll now compose it using the colors of the objects on our light path
 
-            float total_dist = impact_distances[i];
-            
-            for (int a = i - 1; a > 0; a++) {
-                total_dist += impact_distances[a];
+            for (int a = i - 1; a >= 0; a--) {
+                Sphere _sph = spheres[impact_sindices[a]];
+                vec3 dif = PointLights_to_Sphere(impact_points[a], _sph, r);
+                reflected_color *= _sph.col.xyz * _sph.reflexivity;
+                reflected_color += dif * _sph.diffuse_factor;
             }
-
-            float df = 1 / (total_dist * total_dist); // diffused color already factors in the light - object distance, this is the object camera distance factor
-            col = vec4(diffused_color * closest_s.col.xyz * df, 1.0);
+            col = vec4(reflected_color, 1.0);
         }
-    */
+    }
 
     imageStore(img, ivec2(gl_GlobalInvocationID.xy), col);
 }

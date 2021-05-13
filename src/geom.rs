@@ -1,19 +1,24 @@
 pub mod sphere {
 	#[derive(Debug, Copy, Clone)]
+	#[repr(C)]
 	pub struct Sphere {
 		pub pos: [f32; 4],
 		pub col: [f32; 4],
 		pub r: f32,
-		_pad: [f32; 3]
+		pub reflexivity: f32,
+		pub diffuse_factor: f32,
+		_pad: f32
 	}
 
 	impl Sphere {
-		pub fn new(pos: [f32; 4], col: [f32; 4], r: f32) -> Self {
+		pub fn new(pos: [f32; 4], col: [f32; 4], r: f32, reflexivity: f32, diffuse_factor: f32) -> Self {
 			Self {
 				pos,
 				col,
 				r,
-				_pad: [0.0; 3]
+				reflexivity,
+				diffuse_factor,
+				_pad: 0.0
 			}
 		}
 	}
@@ -52,7 +57,7 @@ pub mod sphere {
 
 			self.i += 1;
 			
-			Some(Sphere::new(pos, color.into(), self.r))
+			Some(Sphere::new(pos, color.into(), self.r, 0.5, 0.5))
 		}
 	}
 

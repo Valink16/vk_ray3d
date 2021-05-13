@@ -1,3 +1,5 @@
+#![crate_type = "staticlib"]
+
 // Rexporting, users should favor the rexports over getting their preferred version through cargo to insure compatibility
 pub extern crate vulkano;
 pub extern crate winit;

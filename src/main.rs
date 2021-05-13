@@ -10,7 +10,7 @@ use vulkano::descriptor::descriptor_set::PersistentDescriptorSet;
 use vulkano::buffer::BufferUsage;
 use winit::{dpi::PhysicalSize, event};
 
-use std::sync::Arc;
+use std::{f32::consts::PI, sync::Arc};
 
 use crate::{geom::sphere::Sphere, quaternion::Quaternion};
 
@@ -25,7 +25,12 @@ fn main() {
         let scale = 1.0;
         let camera_speed = 0.5;
         let _size = PhysicalSize::new((_size.width as f32 * scale) as u32, (_size.height as f32 * scale) as u32);
-        
+        let bu = BufferUsage {
+            transfer_destination: true,
+            storage_buffer: true,
+            .. BufferUsage::none()
+        };
+
         let output_img = util::build_image(_device.clone(), _queue.clone(),
             ImageDimensions::Dim2d { width: _size.width, height: _size.height, array_layers: 1 },
             vulkano::format::Format::B8G8R8A8Unorm
@@ -38,23 +43,29 @@ fn main() {
         };
 
         let sphere_buffer = {
-            let spheres = vec![
-                Sphere::new([0.0, 0.0, 20.0, 1.0], [1.0, 1.0, 1.0, 1.0], 3.0),
-                Sphere::new([0.0, 0.0, 15.0, 1.0], [1.0, 1.0, 1.0, 1.0], 0.5),
+            let mut spheres = vec![
+                Sphere::new([0.0, 0.0, 20.0, 1.0], [1.0, 1.0, 1.0, 1.0], 3.0, 0.2, 0.8),
             ];
+
+            let s = 10;
+            for i in 0..s {
+                let angle = i as f32 * (2.0 * PI / s as f32);
+                spheres.push(Sphere::new([angle.cos() * 4.0, 0.0, angle.sin() * 4.0 + 20.0, 1.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, 0.5));
+            }
     
-            util::build_cpu_buffer(_device.clone(), BufferUsage::all(), spheres).unwrap()
+            util::build_cpu_buffer(_device.clone(), bu, spheres).unwrap()
         };
 
         let light_buffer = {
             let lights = vec![
-                light::PointLight::new(Vec3::new(-3.5, 3.5, 0.0), Vec3::new(1.0, 0.0, 0.0), 300.0),
-                light::PointLight::new(Vec3::new(3.5, -3.5, 0.0), Vec3::new(0.0, 0.0, 1.0), 300.0),
-                // light::PointLight::new(Vec3::new(0.0, 0.0, 2.0), Vec3::new(1.0, 1.0, 1.0), 5000.0),
+                // light::PointLight::new(Vec3::new(0.0, 10.0, 20.0), Vec3::new(1.0, 0.0, 1.0), 3000.0),
+                light::PointLight::new(Vec3::new(3.5, -3.5, 0.0), Vec3::new(0.0, 0.0, 1.0), 1500.0),
+                light::PointLight::new(Vec3::new(-3.5, -3.5, 0.0), Vec3::new(1.0, 0.0, 0.0), 1500.0),
+                //light::PointLight::new(Vec3::new(0.0, 13.0, 0.0), Vec3::new(1.0, 1.0, 1.0), 10000.0),
                 // light::PointLight::new(Vec3::new(0.0, -20.0, 20.0), Vec3::new(1.0, 1.0, 1.0), 10000.0),
             ];
 
-            util::build_cpu_buffer(_device.clone(), BufferUsage::all(), lights).unwrap()
+            util::build_cpu_buffer(_device.clone(), bu, lights).unwrap()
         };
 
         let ds = PersistentDescriptorSet::start(_layout)
@@ -64,7 +75,7 @@ fn main() {
             .add_buffer(light_buffer.clone()).unwrap()
             .build().unwrap();
 
-        let dispatch = [_size.width / 8 + 1, _size.width / 8 + 1, 1];
+        let dispatch = [_size.width / 8, _size.width / 8, 1];
 
         let mut y_angle = 0.0;
         let mut x_angle = 0.0;
@@ -116,8 +127,14 @@ fn main() {
                     t += 0.001;
                     match sphere_buffer.write() {
                         Ok(mut sb) => {
-                            sb[1].pos[2] = t.cos() * 5.0 + 20.0;
-                            sb[1].pos[0] = t.sin() * 5.0;
+                            // let r = Quaternion::from_axis(Vec3::new(0.0, 1.0, 0.0), 0.001);
+                            let r = Quaternion::new(0.0, 0.0, 0.0, 1.0);
+
+                            for i in 1..sb.len() {
+                                let pos = Vec3::new(sb[i].pos[0], sb[i].pos[1], sb[i].pos[2] - 20.0);
+                                let pos = r.transform_point(pos);
+                                sb[i].pos = [pos.x, pos.y, pos.z + 20.0, 1.0];
+                            }
                         },
                         _ => ()
                     }
