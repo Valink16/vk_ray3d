@@ -1,6 +1,7 @@
 use nalgebra_glm::{Vec3, Vec4};
 
 #[derive(Debug, Copy, Clone)]
+#[repr(C)]
 pub struct PointLight {
 	pub pos: [f32; 4],
 	pub col: [f32; 3],
@@ -19,6 +20,7 @@ impl PointLight {
 }
 
 #[derive(Debug, Copy, Clone)]
+#[repr(C)]
 pub struct DirectionalLight {
 	pub direction: [f32; 4],
 	pub col: [f32; 3],

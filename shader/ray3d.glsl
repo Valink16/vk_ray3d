@@ -2,6 +2,8 @@
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 layout(set = 0, binding = 0, r8) uniform writeonly image2D img;
 
+#include "consts.glsl"
+
 struct Ray {
     vec4 origin;
     vec4 dir;
@@ -13,6 +15,12 @@ struct Sphere {
     float r;
     float reflexivity; // When computing reflections, factor of the incoming light reflected
     float diffuse_factor; // When computing reflections, factor of the added diffuse light to the incoming reflected light
+};
+
+struct Polygon {
+    vec4 vertices[FACE_COUNT * 3]; // Doing * 3 makes sure there is always enough vertices for the indices
+    uvec4 indices[FACE_COUNT];
+    uint indices_size;
 };
 
 struct PointLight {
@@ -47,7 +55,9 @@ layout(push_constant) uniform Camera {
     vec4 orientation; // Quaternion
 } camera;
 
-#include "consts.glsl"
+uint SPHERES_LENGTH = spheres.length();
+uint LIGHTS_COUNT = point_lights.length();
+
 #include "quaternion.glsl"
 #include "sphere.glsl"
 #include "light.glsl"
@@ -56,11 +66,6 @@ void main() {
     ivec2 img_size = imageSize(img);
     uint ri = gl_GlobalInvocationID.y * img_size.x + gl_GlobalInvocationID.x;
     Ray r = rays[ri];
-
-    if (length(camera.pos) == 0.1) {
-        imageStore(img, ivec2(gl_GlobalInvocationID.xy), vec4(1.0));
-        return;
-    }
 
     r.origin += camera.pos;
     r.dir.xyz = transform_point(camera.orientation, r.dir.xyz);
@@ -74,7 +79,7 @@ void main() {
         // The following arrays store the data about the reflection to then bactrace from the last impact and find the final color
         vec4 impact_points[REFLECT_DEPTH];
         uint impact_sindices[REFLECT_DEPTH];
-        float impact_distance = 0.0;
+        float impact_distances[REFLECT_DEPTH];
 
         Sphere closest_s = spheres[closest_si];
         vec4 impact_point = r.origin + r.dir * closest_d;
@@ -84,7 +89,7 @@ void main() {
         r.dir = reflect(r.dir, normal); // Used to iterate through reflections
         impact_points[0] = impact_point;
         impact_sindices[0] = closest_si;
-        impact_distance += closest_d;
+        impact_distances[0] = 0.0; // We choose arbitrarily to ignore the camera
 
         int i; // So we can keep track of when the for loop stopped for later
         for (i = 1; i < REFLECT_DEPTH; i++) {
@@ -96,7 +101,7 @@ void main() {
 
             impact_points[i] = r.origin + r.dir * closest_d;
             impact_sindices[i] = closest_si;
-            impact_distance += closest_d;
+            impact_distances[i] = closest_d;
             
             normal = normalize(impact_points[i] - spheres[closest_si].pos);
             r.origin = impact_points[i]; // New origin is the impact point
@@ -106,15 +111,18 @@ void main() {
         if (i > 0) {
             --i; // or index out of range
 
-            vec3 reflected_color = PointLights_to_Sphere(impact_points[i], spheres[impact_sindices[i]], r) * spheres[impact_sindices[i]].reflexivity; // This is the color on the "last" impact, we'll now compose it using the colors of the objects on our light path
+            Sphere _sph = spheres[impact_sindices[i]];
+            vec3 reflected_color = PointLights_to_Sphere(impact_points[i], _sph, r) * _sph.col.xyz * _sph.diffuse_factor;
 
             for (int a = i - 1; a >= 0; a--) {
-                Sphere _sph = spheres[impact_sindices[a]];
-                vec3 dif = PointLights_to_Sphere(impact_points[a], _sph, r);
-                reflected_color *= _sph.col.xyz * _sph.reflexivity;
-                reflected_color += dif * _sph.diffuse_factor;
+                _sph = spheres[impact_sindices[a]];
+                // vec3 dif = PointLights_to_Sphere(impact_points[a], _sph, r) * _sph.diffuse_factor;
+                float df = 1 / (impact_distances[a + 1] * impact_distances[a + 1]);
+                reflected_color *= (_sph.col.xyz * _sph.reflexivity * df);
+                reflected_color += (PointLights_to_Sphere(impact_points[a], _sph, r) * _sph.col.xyz * _sph.diffuse_factor); // Add diffused light
             }
-            col = vec4(reflected_color, 1.0);
+
+            col = vec4((reflected_color), 1.0);
         }
     }
 

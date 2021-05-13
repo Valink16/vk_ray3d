@@ -21,7 +21,7 @@ mod camera;
 mod quaternion;
 
 fn main() {
-        let ds_builder = move |_size: PhysicalSize<u32>, _device: Arc<Device>, _queue: Arc<Queue>, _layout| {
+    let ds_builder = move |_size: PhysicalSize<u32>, _device: Arc<Device>, _queue: Arc<Queue>, _layout| {
         let scale = 1.0;
         let camera_speed = 0.5;
         let _size = PhysicalSize::new((_size.width as f32 * scale) as u32, (_size.height as f32 * scale) as u32);
@@ -35,6 +35,7 @@ fn main() {
             ImageDimensions::Dim2d { width: _size.width, height: _size.height, array_layers: 1 },
             vulkano::format::Format::B8G8R8A8Unorm
         );
+
         let output_img_view = ImageView::new(output_img.clone()).unwrap();
 
         let ray_buffer = {
@@ -44,7 +45,7 @@ fn main() {
 
         let sphere_buffer = {
             let mut spheres = vec![
-                Sphere::new([0.0, 0.0, 20.0, 1.0], [1.0, 1.0, 1.0, 1.0], 3.0, 0.2, 0.8),
+                Sphere::new([0.0, 0.0, 20.0, 1.0], [0.0, 0.0, 1.0, 1.0], 3.0, 0.5, 0.5),
             ];
 
             let s = 10;
@@ -59,14 +60,16 @@ fn main() {
         let light_buffer = {
             let lights = vec![
                 // light::PointLight::new(Vec3::new(0.0, 10.0, 20.0), Vec3::new(1.0, 0.0, 1.0), 3000.0),
-                light::PointLight::new(Vec3::new(3.5, -3.5, 0.0), Vec3::new(0.0, 0.0, 1.0), 1500.0),
-                light::PointLight::new(Vec3::new(-3.5, -3.5, 0.0), Vec3::new(1.0, 0.0, 0.0), 1500.0),
-                //light::PointLight::new(Vec3::new(0.0, 13.0, 0.0), Vec3::new(1.0, 1.0, 1.0), 10000.0),
+                // light::PointLight::new(Vec3::new(100.0, 0.0, 15.0), Vec3::new(0.0, 0.0, 1.0), 10000.0),
+                light::PointLight::new(Vec3::new(-100.0, 0.0, 15.0), Vec3::new(1.0, 0.0, 0.0), 15000.0),
+                light::PointLight::new(Vec3::new(-20.0, 100.0, 0.0), Vec3::new(1.0, 1.0, 1.0), 20000.0),
                 // light::PointLight::new(Vec3::new(0.0, -20.0, 20.0), Vec3::new(1.0, 1.0, 1.0), 10000.0),
             ];
 
             util::build_cpu_buffer(_device.clone(), bu, lights).unwrap()
         };
+
+        let cube = geom::poly::Polygon::from_file("./STL/cube.stl");
 
         let ds = PersistentDescriptorSet::start(_layout)
             .add_image(output_img_view).unwrap()
@@ -114,6 +117,7 @@ fn main() {
                         _ => ()
                     }
 
+                    // Update camera
                     let x_axis = Quaternion::from_axis(Vec3::new(1.0, 0.0, 0.0), x_angle);
                     let y_axis = Quaternion::from_axis(Vec3::new(0.0, 1.0, 0.0), y_angle);
                     let camera_quat = y_axis * x_axis;

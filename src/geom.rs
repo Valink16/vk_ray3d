@@ -67,3 +67,62 @@ pub mod sphere {
 		}
 	}
 }
+
+
+pub mod poly {
+	use std::fs;
+	use std::path;
+	use stl_io;
+
+	const FACE_COUNT: usize = 100;
+	#[derive(Debug)]
+	#[repr(C)]
+	pub struct Polygon {
+		vertices: [[f32; 4]; FACE_COUNT * 3], // *3 So we have 3 vertices for each triangle
+		indices: [[u32; 4]; FACE_COUNT], // Array of ivec3 containing indexes of each triangle vertices
+		indices_size: u32, // Tells at which index to stop on the indices array
+		_pad: [u32; 3]
+	}
+
+	impl Polygon {
+		pub fn from_file(filename: &str) -> Result<Self, String> {
+			let mut f = match fs::File::open(filename) {
+				Ok(f) => f,
+				Err(e) => return Err(String::from(format!("Failed to open STL file, {:?}", e)))
+			};
+
+			let mesh = match stl_io::read_stl(&mut f) {
+				Ok(mesh) => mesh,
+				Err(e) => return Err(String::from(format!("Failed to read STL file, {:?}", e)))
+			};
+
+			let mut vertices: [[f32; 4]; FACE_COUNT * 3] = [[0.0; 4]; FACE_COUNT * 3];
+			let mut indices: [[u32; 4]; FACE_COUNT] = [[0; 4]; FACE_COUNT];
+
+			for (i, t) in mesh.faces.iter().enumerate() {
+				indices[i] = [
+					t.vertices[0] as u32,
+					t.vertices[1] as u32,
+					t.vertices[2] as u32,
+					0
+				]
+			}
+
+			for (i, v) in mesh.vertices.iter().enumerate() {
+				vertices[i] = [
+					v[0],
+					v[1],
+					v[2],
+					0.0
+				];
+			}
+
+			Ok(Self {
+				vertices,
+				indices,
+				indices_size: mesh.faces.len() as u32,
+				_pad: [0; 3]
+			})
+		}
+	}
+}

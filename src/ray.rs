@@ -2,6 +2,7 @@ use std::iter::Iterator;
 use crate::winit::dpi::PhysicalSize;
 
 #[derive(Debug, Copy, Clone)]
+#[repr(C)]
 pub struct Ray {
 	origin: [f32; 4],
 	dir: [f32; 4],

@@ -4,6 +4,7 @@ use nalgebra_glm as glm;
 use glm::{Vec3, dot, cross};
 
 #[derive(Debug, Clone, Copy)]
+#[repr(C)]
 pub struct Quaternion {
     pub v: glm::Vec3,
     pub s: f32
