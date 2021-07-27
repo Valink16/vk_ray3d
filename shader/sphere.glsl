@@ -1,4 +1,4 @@
-// Returns from the origin to a given Sphere for a Ray
+// Returns distance from the origin to a given Sphere for a Ray
 float Ray_dist_to_Sphere(Ray r, Sphere s) {
 
     float a = r.dir.x*r.dir.x + r.dir.y*r.dir.y + r.dir.z*r.dir.z;

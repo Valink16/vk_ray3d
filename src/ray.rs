@@ -41,7 +41,7 @@ impl Iterator for RayIter {
 		self.i += 1;
 
 		Some(Ray {
-			origin: [0.0, 0.0, 0.0, 1.0],
+			origin: [0.0, 0.0, 0.0, 0.0],
 			dir,
 		})
 	}

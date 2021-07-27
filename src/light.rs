@@ -10,7 +10,7 @@ pub struct PointLight {
 
 impl PointLight {
 	pub fn new(pos: Vec3, col: Vec3, intensity: f32) -> Self {
-		let pos = Vec4::new(pos.x, pos.y, pos.z, 1.0);
+		let pos = Vec4::new(pos.x, pos.y, pos.z, 0.0);
 		Self {
 			pos: pos.into(),
 			col: col.into(),
@@ -29,7 +29,7 @@ pub struct DirectionalLight {
 
 impl DirectionalLight {
 	pub fn new(direction: Vec3, col: Vec3) -> Self {
-		let direction = Vec4::new(direction.x, direction.y, direction.z, 1.0);
+		let direction = Vec4::new(direction.x, direction.y, direction.z, 0.0);
 		Self {
 			direction: direction.into(),
 			col: col.into(),

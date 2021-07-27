@@ -21,6 +21,33 @@ mod camera;
 mod quaternion;
 
 fn main() {
+    let mut vertices = Vec::<[f32; 4]>::new();
+    let mut indices = Vec::<[u32; 4]>::new();
+
+    let models = vec![
+        geom::model::Model::new("STL/cube.stl", [0.0, 0.0, 10.0], &mut vertices, &mut indices),
+        geom::model::Model::new("STL/pyramid.stl", [0.0, 3.0, 10.0], &mut vertices, &mut indices),
+        geom::model::Model::new("STL/monkey.stl", [0.0, -3.0, 10.0], &mut vertices, &mut indices)
+    ];
+
+    /*
+    let models = vec![
+        geom::model::Model {
+            pos: [0.0, 0.0, 10.0, 0.0],
+            indices_start: 0,
+            indices_end: 2,
+            _pad: [0; 2]
+        }
+    ];
+
+    vertices.push([-1.0, 1.0, 0.0, 0.0]);
+    vertices.push([-1.0, -1.0, 0.0, 0.0]);
+    vertices.push([10.0, -1.0, 0.0, 0.0]);
+    vertices.push([10.0, 1.0, 0.0, 0.0]);
+    indices.push([0, 1, 2, 0]);
+    indices.push([0, 2, 3, 0]);
+    */
+
     let ds_builder = move |_size: PhysicalSize<u32>, _device: Arc<Device>, _queue: Arc<Queue>, _layout| {
         let scale = 1.0;
         let camera_speed = 0.5;
@@ -45,17 +72,24 @@ fn main() {
 
         let sphere_buffer = {
             let mut spheres = vec![
-                Sphere::new([0.0, 0.0, 20.0, 1.0], [0.0, 0.0, 1.0, 1.0], 3.0, 0.5, 0.5),
+                Sphere::new([0.0, 0.0, 20.0], [0.0, 0.0, 1.0, 1.0], 3.0, 0.5, 0.5),
             ];
 
             let s = 10;
             for i in 0..s {
                 let angle = i as f32 * (2.0 * PI / s as f32);
-                spheres.push(Sphere::new([angle.cos() * 4.0, 0.0, angle.sin() * 4.0 + 20.0, 1.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, 0.5));
+                spheres.push(Sphere::new([angle.cos() * 4.0, 0.0, angle.sin() * 4.0 + 20.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, 0.5));
             }
     
             util::build_cpu_buffer(_device.clone(), bu, spheres).unwrap()
         };
+
+        let model_buffer = {
+            util::build_cpu_buffer(_device.clone(), BufferUsage::all(), models).unwrap()
+        };
+
+        let vertex_buffer = util::build_local_buffer(_device.clone(), _queue.clone(), BufferUsage::all(), vertices).unwrap();
+        let indice_buffer = util::build_local_buffer(_device.clone(), _queue.clone(), BufferUsage::all(), indices).unwrap();
 
         let light_buffer = {
             let lights = vec![
@@ -69,12 +103,13 @@ fn main() {
             util::build_cpu_buffer(_device.clone(), bu, lights).unwrap()
         };
 
-        let cube = geom::poly::Polygon::from_file("./STL/cube.stl");
-
         let ds = PersistentDescriptorSet::start(_layout)
             .add_image(output_img_view).unwrap()
             .add_buffer(ray_buffer.clone()).unwrap()
             .add_buffer(sphere_buffer.clone()).unwrap()
+            .add_buffer(model_buffer.clone()).unwrap()
+            .add_buffer(vertex_buffer.clone()).unwrap()
+            .add_buffer(indice_buffer.clone()).unwrap()
             .add_buffer(light_buffer.clone()).unwrap()
             .build().unwrap();
 
@@ -137,7 +172,7 @@ fn main() {
                             for i in 1..sb.len() {
                                 let pos = Vec3::new(sb[i].pos[0], sb[i].pos[1], sb[i].pos[2] - 20.0);
                                 let pos = r.transform_point(pos);
-                                sb[i].pos = [pos.x, pos.y, pos.z + 20.0, 1.0];
+                                sb[i].pos = [pos.x, pos.y, pos.z + 20.0, 0.0];
                             }
                         },
                         _ => ()
@@ -161,6 +196,10 @@ fn main() {
     shader_layout.add_buffer(0, false);
     shader_layout.add_buffer(0, false);
     shader_layout.add_buffer(0, false);
+    shader_layout.add_buffer(0, false);
+    shader_layout.add_buffer(0, false);
+    shader_layout.add_buffer(0, false);
+    // shader_layout.add_buffer(0, false);
     shader_layout.add_push_constant_range(0, 32);
 
     let shader = loader::Shader::load(canvas.device.clone(), "shader/ray3d.glsl", shader_layout)

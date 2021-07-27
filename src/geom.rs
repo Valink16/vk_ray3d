@@ -1,6 +1,6 @@
 pub mod sphere {
-	#[derive(Debug, Copy, Clone)]
 	#[repr(C)]
+	#[derive(Debug, Copy, Clone)]
 	pub struct Sphere {
 		pub pos: [f32; 4],
 		pub col: [f32; 4],
@@ -11,7 +11,8 @@ pub mod sphere {
 	}
 
 	impl Sphere {
-		pub fn new(pos: [f32; 4], col: [f32; 4], r: f32, reflexivity: f32, diffuse_factor: f32) -> Self {
+		pub fn new(pos: [f32; 3], col: [f32; 4], r: f32, reflexivity: f32, diffuse_factor: f32) -> Self {
+			let pos = [pos[0], pos[1], pos[2], 0.0];
 			Self {
 				pos,
 				col,
@@ -47,7 +48,7 @@ pub mod sphere {
 
 			let delta_dist = self.r * 2.5;
 
-			let pos = [-(delta_dist) * (self.len as f32 / 2.0) + self.i as f32 * delta_dist, 0.0, 10.0, 1.0];
+			let pos = [-(delta_dist) * (self.len as f32 / 2.0) + self.i as f32 * delta_dist, 0.0, 10.0];
 			
 			// let mut color = Vec4::new(pos[0].abs(), 0.0, pos[2] / 20.0, 1.0);
 			// color.normalize_mut();
@@ -68,61 +69,57 @@ pub mod sphere {
 	}
 }
 
-
-pub mod poly {
-	use std::fs;
-	use std::path;
+pub mod model {
 	use stl_io;
+	use std::fs;
 
-	const FACE_COUNT: usize = 100;
-	#[derive(Debug)]
 	#[repr(C)]
-	pub struct Polygon {
-		vertices: [[f32; 4]; FACE_COUNT * 3], // *3 So we have 3 vertices for each triangle
-		indices: [[u32; 4]; FACE_COUNT], // Array of ivec3 containing indexes of each triangle vertices
-		indices_size: u32, // Tells at which index to stop on the indices array
-		_pad: [u32; 3]
+	#[derive(Debug, Clone, Copy)]
+	pub struct Model {
+		pub pos: [f32; 4],
+		pub indices_start: u32, // Index of the first indexed triangle of the model in the global indexed triangles array
+		pub indices_end: u32, // End of the indexed triangles
+		pub _pad: [u32; 2]
 	}
 
-	impl Polygon {
-		pub fn from_file(filename: &str) -> Result<Self, String> {
-			let mut f = match fs::File::open(filename) {
-				Ok(f) => f,
-				Err(e) => return Err(String::from(format!("Failed to open STL file, {:?}", e)))
-			};
+	impl Model {
+		pub fn new(name: &str, pos: [f32; 3], vertices: &mut Vec<[f32; 4]>, indices: &mut Vec<[u32; 4]>) -> Self {
+			let pos = [pos[0], pos[1], pos[2], 0.0];
+			let vertices_offset = vertices.len() as u32;
+			let indices_start = indices.len() as u32;
 
-			let mesh = match stl_io::read_stl(&mut f) {
-				Ok(mesh) => mesh,
-				Err(e) => return Err(String::from(format!("Failed to read STL file, {:?}", e)))
-			};
+			let mut stl_file_reader = fs::File::open(name)
+				.expect(&format!("Failed to open {}", name));
+			let stl_file = stl_io::read_stl(&mut stl_file_reader)
+				.expect(&format!("Failed to read {}", name));
+			
 
-			let mut vertices: [[f32; 4]; FACE_COUNT * 3] = [[0.0; 4]; FACE_COUNT * 3];
-			let mut indices: [[u32; 4]; FACE_COUNT] = [[0; 4]; FACE_COUNT];
-
-			for (i, t) in mesh.faces.iter().enumerate() {
-				indices[i] = [
-					t.vertices[0] as u32,
-					t.vertices[1] as u32,
-					t.vertices[2] as u32,
-					0
-				]
-			}
-
-			for (i, v) in mesh.vertices.iter().enumerate() {
-				vertices[i] = [
-					v[0],
-					v[1],
-					v[2],
+			for vertex in stl_file.vertices {
+				vertices.push([
+					vertex[0],
+					vertex[2], // Swap y and z
+					vertex[1],
 					0.0
-				];
+				])
 			}
 
-			Ok(Self {
-				vertices,
-				indices,
-				indices_size: mesh.faces.len() as u32,
-				_pad: [0; 3]
-			})
+			for indexed_tri in stl_file.faces {
+				indices.push([
+					indexed_tri.vertices[0] as u32 + vertices_offset,
+					indexed_tri.vertices[1] as u32 + vertices_offset,
+					indexed_tri.vertices[2] as u32 + vertices_offset,
+					0
+				])
+			}
+
+			let indices_end = indices.len() as u32; // used in a for loop for iterating over the triangles
+
+			Self {
+				pos,
+				indices_start,
+				indices_end,
+				_pad: [0; 2]
+			}
 		}
 	}
 }

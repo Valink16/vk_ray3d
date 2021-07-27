@@ -17,10 +17,10 @@ struct Sphere {
     float diffuse_factor; // When computing reflections, factor of the added diffuse light to the incoming reflected light
 };
 
-struct Polygon {
-    vec4 vertices[FACE_COUNT * 3]; // Doing * 3 makes sure there is always enough vertices for the indices
-    uvec4 indices[FACE_COUNT];
-    uint indices_size;
+struct Model {
+    vec4 pos;
+    uint indices_start; // Index of the first indexed triangle of the model in the global indexed triangles array
+    uint indices_end; // End of the indexed triangles
 };
 
 struct PointLight {
@@ -42,11 +42,23 @@ layout(set = 0, binding = 2, std430) buffer Spheres {
     Sphere spheres[];
 };
 
-layout(set = 0, binding = 3, std430) buffer PointLights {
+layout(set = 0, binding = 3, std430) buffer Models {
+    Model models[];
+};
+
+layout(set = 0, binding = 4, std430) buffer Vertices {
+    vec3 vertices[];
+};
+
+layout(set = 0, binding = 5, std430) buffer Indices {
+    uvec3 indices[];
+};
+
+layout(set = 0, binding = 6, std430) buffer PointLights {
     PointLight point_lights[];
 };
 
-layout(set = 0, binding = 4, std430) buffer DirectionalLights {
+layout(set = 0, binding = 7, std430) buffer DirectionalLights {
     DirectionalLight directional_lights[];
 };
 
@@ -56,11 +68,13 @@ layout(push_constant) uniform Camera {
 } camera;
 
 uint SPHERES_LENGTH = spheres.length();
+uint MODELS_LENGTH = models.length();
 uint LIGHTS_COUNT = point_lights.length();
 
 #include "quaternion.glsl"
 #include "sphere.glsl"
 #include "light.glsl"
+#include "model.glsl"
 
 void main() {
     ivec2 img_size = imageSize(img);
@@ -72,6 +86,7 @@ void main() {
 
     vec4 col = vec4(0.0, 0.0, 0.0, 1.0);
 
+    /*
     uint closest_si;
     float closest_d = Ray_trace_to_Spheres(r, closest_si);
 
@@ -124,6 +139,14 @@ void main() {
 
             col = vec4((reflected_color), 1.0);
         }
+    }
+    */
+
+    uint closest_mi;
+    float closest_model_dist = Ray_trace_to_Models(r, closest_mi);
+
+    if (closest_mi != MODELS_LENGTH) {
+        col = vec4(0.0, 0.0, 1.0, 1.0);   
     }
 
     imageStore(img, ivec2(gl_GlobalInvocationID.xy), col);
