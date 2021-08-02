@@ -23,7 +23,7 @@ float Ray_dist_to_Triangle(Ray r, vec3 A, vec3 B, vec3 C) {
 	vec3 AC_cross_neg_d = cross(AC, -d);
 	float detm = dot(AB, AC_cross_neg_d);
 
-	if (detm == 0) {
+	if (detm == 0) { // Ray is parallel to the triangle
 		return -1.0;
 	}
 
@@ -38,7 +38,11 @@ float Ray_dist_to_Triangle(Ray r, vec3 A, vec3 B, vec3 C) {
 
 		if ((v >= 0 && v <= 1) && (u + v) <= 1) {
 			float dett = dot(P_cross_AB, AC);
-			return dett / detm;
+
+			float t = dett / detm;
+			if (t > RAY_COLLISION_PRECISION) {
+				return t;
+			}
 		}
 	}
 
@@ -46,7 +50,7 @@ float Ray_dist_to_Triangle(Ray r, vec3 A, vec3 B, vec3 C) {
 }
 
 // Returns the dist to a model for a specific ray, returns -1.0 if no collision
-float Ray_dist_to_Model(Ray r, Model model) {
+float Ray_dist_to_Model(Ray r, Model model, out uint closest_tri_index) {
 	float closest_tri_dist = 1.0 / 0.0;
 	vec3 pos = model.pos.xyz;
 
@@ -59,6 +63,7 @@ float Ray_dist_to_Model(Ray r, Model model) {
 		float d = Ray_dist_to_Triangle(r, A, B, C);
 		if (d != -1.0 && d < closest_tri_dist) {
 			closest_tri_dist = d;
+			closest_tri_index = i;
 		}
 	}
 
@@ -71,15 +76,18 @@ float Ray_dist_to_Model(Ray r, Model model) {
 
 // Traces the given ray to all spheres on the scene and returns the closest_d and writes to closest_mi the index of the detected model
 // closest_mi == MODELS_LENGTH if no ray collisions
-float Ray_trace_to_Models(Ray r, out uint closest_mi) {
+float Ray_trace_to_Models(Ray r, out uint closest_mi, out uint closest_tri_index) {
 	closest_mi = MODELS_LENGTH;
 	
 	float closest_model_dist = 1.0 / 0.0;
 
+	uint _closest_tri_index = 0;
+
 	for (int i = 0; i < MODELS_LENGTH; i++) {
-		float d = Ray_dist_to_Model(r, models[i]);
+		float d = Ray_dist_to_Model(r, models[i], _closest_tri_index);
 		if (d != -1.0 && d < closest_model_dist) {
 			closest_model_dist = d;
+			closest_tri_index = _closest_tri_index;
 			closest_mi = i;
 		}
 	}

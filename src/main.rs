@@ -25,9 +25,9 @@ fn main() {
     let mut indices = Vec::<[u32; 4]>::new();
 
     let models = vec![
-        geom::model::Model::new("STL/cube.stl", [0.0, 0.0, 10.0], &mut vertices, &mut indices),
-        geom::model::Model::new("STL/pyramid.stl", [0.0, 3.0, 10.0], &mut vertices, &mut indices),
-        geom::model::Model::new("STL/monkey.stl", [0.0, -3.0, 10.0], &mut vertices, &mut indices)
+        geom::model::Model::new("STL/cube.stl", [-1.5, 0.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, &mut vertices, &mut indices),
+        geom::model::Model::new("STL/pyramid.stl", [1.5, -0.5, 10.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, &mut vertices, &mut indices),
+        geom::model::Model::new("STL/monkey.stl", [0.0, -3.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, &mut vertices, &mut indices)
     ];
 
     /*
@@ -49,7 +49,7 @@ fn main() {
     */
 
     let ds_builder = move |_size: PhysicalSize<u32>, _device: Arc<Device>, _queue: Arc<Queue>, _layout| {
-        let scale = 1.0;
+        let scale = 0.5;
         let camera_speed = 0.5;
         let _size = PhysicalSize::new((_size.width as f32 * scale) as u32, (_size.height as f32 * scale) as u32);
         let bu = BufferUsage {
@@ -66,7 +66,7 @@ fn main() {
         let output_img_view = ImageView::new(output_img.clone()).unwrap();
 
         let ray_buffer = {
-            let rays = ray::RayIter::new(_size, std::f32::consts::FRAC_PI_2);
+            let rays = ray::RayIter::new(_size, std::f32::consts::PI * 0.5);
             util::build_local_buffer(_device.clone(), _queue.clone(), BufferUsage::all(), rays).unwrap()
         };
 
@@ -94,10 +94,10 @@ fn main() {
         let light_buffer = {
             let lights = vec![
                 // light::PointLight::new(Vec3::new(0.0, 10.0, 20.0), Vec3::new(1.0, 0.0, 1.0), 3000.0),
-                // light::PointLight::new(Vec3::new(100.0, 0.0, 15.0), Vec3::new(0.0, 0.0, 1.0), 10000.0),
-                light::PointLight::new(Vec3::new(-100.0, 0.0, 15.0), Vec3::new(1.0, 0.0, 0.0), 15000.0),
-                light::PointLight::new(Vec3::new(-20.0, 100.0, 0.0), Vec3::new(1.0, 1.0, 1.0), 20000.0),
-                // light::PointLight::new(Vec3::new(0.0, -20.0, 20.0), Vec3::new(1.0, 1.0, 1.0), 10000.0),
+                light::PointLight::new(Vec3::new(0.0, 10.0, 5.0), Vec3::new(0.0, 0.0, 1.0), 70.0),
+                light::PointLight::new(Vec3::new(-10.0, 0.0, 5.0), Vec3::new(1.0, 0.0, 0.0), 70.0),
+                light::PointLight::new(Vec3::new(0.0, 0.0, 5.0), Vec3::new(0.0, 1.0, 0.0), 70.0),
+                light::PointLight::new(Vec3::new(10.0, 0.0, 5.0), Vec3::new(0.0, 0.0, 1.0), 70.0),
             ];
 
             util::build_cpu_buffer(_device.clone(), bu, lights).unwrap()

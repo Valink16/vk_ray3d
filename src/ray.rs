@@ -16,11 +16,12 @@ pub struct RayIter {
 
 impl RayIter {
 	pub fn new(size: PhysicalSize<u32>, fov: f32) -> Self {
+		let fov = fov / 2.0;
 		Self {
 			size,
 			len: size.width * size.height,
 			i: 0,
-			depth: ((fov / 2.0).cos() * size.width as f32) / (2.0 * (fov / 2.0)) // Trigo properties
+			depth: (fov.cos() * size.width as f32) / (2.0 * fov.sin()) // Trigo properties
 		}
 	}
 }
