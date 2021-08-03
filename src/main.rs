@@ -25,9 +25,10 @@ fn main() {
     let mut indices = Vec::<[u32; 4]>::new();
 
     let models = vec![
-        geom::model::Model::new("STL/cube.stl", [-1.5, 0.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, &mut vertices, &mut indices),
-        geom::model::Model::new("STL/pyramid.stl", [1.5, -0.5, 10.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, &mut vertices, &mut indices),
-        geom::model::Model::new("STL/monkey.stl", [0.0, -3.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, &mut vertices, &mut indices)
+        geom::model::Model::new("STL/cube.stl", [-2.0, 0.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.0, 1.0, &mut vertices, &mut indices),
+        geom::model::Model::new("STL/pyramid.stl", [2.0, -1.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.9, 0.1, &mut vertices, &mut indices),
+        geom::model::Model::new("STL/monkey.stl", [0.0, 0.0, 8.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, &mut vertices, &mut indices),
+        geom::model::Model::new("STL/ground.stl", [0.0, -1.0, 10.0], [0.0, 1.0, 0.0, 1.0], 0.0, 1.0, &mut vertices, &mut indices),
     ];
 
     /*
@@ -93,11 +94,11 @@ fn main() {
 
         let light_buffer = {
             let lights = vec![
-                // light::PointLight::new(Vec3::new(0.0, 10.0, 20.0), Vec3::new(1.0, 0.0, 1.0), 3000.0),
-                light::PointLight::new(Vec3::new(0.0, 10.0, 5.0), Vec3::new(0.0, 0.0, 1.0), 70.0),
-                light::PointLight::new(Vec3::new(-10.0, 0.0, 5.0), Vec3::new(1.0, 0.0, 0.0), 70.0),
-                light::PointLight::new(Vec3::new(0.0, 0.0, 5.0), Vec3::new(0.0, 1.0, 0.0), 70.0),
-                light::PointLight::new(Vec3::new(10.0, 0.0, 5.0), Vec3::new(0.0, 0.0, 1.0), 70.0),
+                light::PointLight::new(Vec3::new(0.0, 10.0, 13.0), Vec3::new(1.0, 1.0, 1.0), 3.0),
+                light::PointLight::new(Vec3::new(0.0, 10.0, 10.0), Vec3::new(1.0, 1.0, 1.0), 70.0),
+                light::PointLight::new(Vec3::new(-10.0, 10.0, 5.0), Vec3::new(0.0, 1.0, 0.0), 70.0),
+                light::PointLight::new(Vec3::new(0.0, 10.0, 5.0), Vec3::new(0.0, 0.0, 1.0), 20.0),
+                light::PointLight::new(Vec3::new(10.0, 10.0, 10.0), Vec3::new(0.0, 1.0, 0.0), 100.0),
             ];
 
             util::build_cpu_buffer(_device.clone(), bu, lights).unwrap()
@@ -146,6 +147,8 @@ fn main() {
                                 31 => camera_movement.z -= camera_speed, // S
                                 30 => camera_movement.x -= camera_speed, // A
                                 32 => camera_movement.x += camera_speed, // D
+                                57 => camera_movement.y += camera_speed, // Space
+                                29 => camera_movement.y -= camera_speed, // CTRL
                                 _ => ()
                             }
                         }

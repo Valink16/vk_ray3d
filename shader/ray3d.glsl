@@ -149,7 +149,7 @@ void main() {
     uint closest_tri_index;
     float closest_model_dist = Ray_trace_to_Models(r, closest_mi, closest_tri_index);
     float _diffuse_factor = 0.5;
-    float _reflexivity = 0.5;
+    float _reflexivity = 1.0;
 
     if (closest_mi != MODELS_LENGTH) {
         Model _mod = models[closest_mi];
@@ -158,12 +158,10 @@ void main() {
         
         col.xyz = PointLights_to_Model(impact_point, _mod, r, closest_tri_index) * _mod.col.xyz * _diffuse_factor;
         
-        /*
         vec4 impact_points[REFLECT_DEPTH];
         uint impact_sindices[REFLECT_DEPTH];
         uint tri_indices[REFLECT_DEPTH]; // Stores the triangle index for each reflection
         float impact_distances[REFLECT_DEPTH];
-
 
         Model closest_m = models[closest_mi];
         
@@ -179,7 +177,8 @@ void main() {
         impact_points[0] = impact_point;
         impact_sindices[0] = closest_mi;
         tri_indices[0] = closest_tri_index;
-        impact_distances[0] = 0.0; // We choose arbitrarily to ignore the camera
+        impact_distances[0] = closest_model_dist; // We choose arbitrarily to ignore the camera
+        float total_distance = closest_model_dist;
 
         int i; // So we can keep track of when the for loop stopped for later
         for (i = 1; i < REFLECT_DEPTH; i++) {
@@ -193,6 +192,7 @@ void main() {
             impact_sindices[i] = closest_mi;
             tri_indices[i] = closest_tri_index;
             impact_distances[i] = closest_model_dist;
+            total_distance += closest_model_dist;
             
             // normal = normalize(impact_points[i] - models[closest_mi].pos);
             AB = vertices[indices[closest_tri_index][1]] - vertices[indices[closest_tri_index][0]]; // B - A
@@ -209,21 +209,27 @@ void main() {
             --i; // or index out of range
 
             Model _mod = models[impact_sindices[i]];
-            vec3 reflected_color = PointLights_to_Model(impact_points[i], _mod, r, tri_indices[i]) * _mod.col.xyz * _diffuse_factor;
+            vec3 reflected_color = PointLights_to_Model(impact_points[i], _mod, r, tri_indices[i]) * _mod.col.xyz * _mod.diffuse_factor;
 
             for (int a = i - 1; a >= 0; a--) {
                 _mod = models[impact_sindices[a]];
                 // vec3 dif = PointLights_to_Model(impact_points[a], _mod, r, closest_tri_index) * _mod.diffuse_factor;
-                float df = 1 / (impact_distances[a + 1] * impact_distances[a + 1]);
-                reflected_color *= (_mod.col.xyz * _reflexivity * df);
-                reflected_color += (PointLights_to_Model(impact_points[a], _mod, r, tri_indices[a]) * _mod.col.xyz * _diffuse_factor); // Add diffused light
-            }
+                
+                float impact_dist = impact_distances[a + 1]; // 
+                if (impact_dist < 0.8) {
+                    impact_dist = 0.8;
+                }
 
+                float df = 1 / (impact_dist * impact_dist);
+
+                reflected_color *= _mod.col.xyz * _mod.reflexivity * df;
+                reflected_color += PointLights_to_Model(impact_points[a], _mod, r, tri_indices[a]) * _mod.col.xyz * _mod.diffuse_factor; // Add diffused light
+            }
             col = vec4(reflected_color, 1.0);
         }
 
         // col += vec4(0.1);
-        */
+        
         
     }
 
