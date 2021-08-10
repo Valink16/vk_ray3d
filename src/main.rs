@@ -25,10 +25,11 @@ fn main() {
     let mut indices = Vec::<[u32; 4]>::new();
 
     let models = vec![
-        geom::model::Model::new("STL/cube.stl", [-2.0, 0.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.0, 1.0, &mut vertices, &mut indices),
-        geom::model::Model::new("STL/pyramid.stl", [2.0, -1.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.9, 0.1, &mut vertices, &mut indices),
-        geom::model::Model::new("STL/monkey.stl", [0.0, 0.0, 8.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, &mut vertices, &mut indices),
-        geom::model::Model::new("STL/ground.stl", [0.0, -1.0, 10.0], [0.0, 1.0, 0.0, 1.0], 0.0, 1.0, &mut vertices, &mut indices),
+        // geom::model::Model::new("STL/cube.stl", [-2.0, 0.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, &mut vertices, &mut indices),
+        geom::model::Model::new("STL/cube.stl", [2.0, 0.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.1, 0.9, &mut vertices, &mut indices),
+        geom::model::Model::new("STL/pyramid.stl", [-2.0, -1.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.9, 0.1, &mut vertices, &mut indices),
+        // geom::model::Model::new("STL/monkey.stl", [0.0, 1.0, 8.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, &mut vertices, &mut indices),
+        geom::model::Model::new("STL/ground.stl", [0.0, -1.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.0, 1.0, &mut vertices, &mut indices),
     ];
 
     /*
@@ -94,11 +95,11 @@ fn main() {
 
         let light_buffer = {
             let lights = vec![
-                light::PointLight::new(Vec3::new(0.0, 10.0, 13.0), Vec3::new(1.0, 1.0, 1.0), 3.0),
-                light::PointLight::new(Vec3::new(0.0, 10.0, 10.0), Vec3::new(1.0, 1.0, 1.0), 70.0),
-                light::PointLight::new(Vec3::new(-10.0, 10.0, 5.0), Vec3::new(0.0, 1.0, 0.0), 70.0),
-                light::PointLight::new(Vec3::new(0.0, 10.0, 5.0), Vec3::new(0.0, 0.0, 1.0), 20.0),
-                light::PointLight::new(Vec3::new(10.0, 10.0, 10.0), Vec3::new(0.0, 1.0, 0.0), 100.0),
+                // light::PointLight::new(Vec3::new(0.0, 10.0, 10.0), Vec3::new(1.0, 1.0, 1.0), 3.0),
+                light::PointLight::new(Vec3::new(0.0, 5.0, 10.0), Vec3::new(1.0, 1.0, 1.0), 20.0),
+                light::PointLight::new(Vec3::new(-10.0, 10.0, 5.0), Vec3::new(0.0, 0.0, 1.0), 20.0),
+                // light::PointLight::new(Vec3::new(0.0, 10.0, 5.0), Vec3::new(0.0, 0.0, 1.0), 20.0),
+                // light::PointLight::new(Vec3::new(10.0, 10.0, 10.0), Vec3::new(0.0, 1.0, 0.0), 100.0),
             ];
 
             util::build_cpu_buffer(_device.clone(), bu, lights).unwrap()
@@ -177,6 +178,22 @@ fn main() {
                                 let pos = r.transform_point(pos);
                                 sb[i].pos = [pos.x, pos.y, pos.z + 20.0, 0.0];
                             }
+                        },
+                        _ => ()
+                    }
+
+                    match light_buffer.write() {
+                        Ok(mut lb) => {
+                            let r = Quaternion::from_axis([0.0, 1.0, 0.0].into(), 0.001);
+                            let mut pos = Vec3::new(lb[1].pos[0], lb[1].pos[1], lb[1].pos[2] - 10.0);
+                            pos = r.transform_point(pos);
+
+                            lb[1].pos = [
+                                pos.x,
+                                pos.y,
+                                pos.z + 10.0,
+                                0.0
+                            ];
                         },
                         _ => ()
                     }
