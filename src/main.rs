@@ -1,13 +1,19 @@
+use compute_vk::vulkano::command_buffer::CommandBuffer;
+use compute_vk::vulkano::sync::GpuFuture;
 use compute_vk::{self, loader, util, vulkano, winit};
 use winit::event::Event;
 use nalgebra_glm::Vec3;
+use image::{self, GenericImageView};
 
 use vulkano::device::Device;
 use vulkano::device::Queue;
+use vulkano::format::Format;
 use vulkano::image::view::ImageView;
-use vulkano::image::ImageDimensions;
+use vulkano::image::{ImageDimensions, ImmutableImage, MipmapsCount, ImageUsage, ImageCreateFlags, ImageLayout};
+use vulkano::sampler::Sampler;
 use vulkano::descriptor::descriptor_set::PersistentDescriptorSet;
-use vulkano::buffer::BufferUsage;
+use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
+use vulkano::command_buffer::AutoCommandBufferBuilder;
 use winit::{dpi::PhysicalSize, event};
 
 use std::{f32::consts::PI, sync::Arc};
@@ -23,13 +29,13 @@ mod quaternion;
 fn main() {
     let mut vertices = Vec::<[f32; 4]>::new();
     let mut indices = Vec::<[u32; 4]>::new();
-
-    let models = vec![
+    
+    let models: Vec<geom::model::Model> = vec![
         // geom::model::Model::new("STL/cube.stl", [-2.0, 0.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, &mut vertices, &mut indices),
         geom::model::Model::new("STL/cube.stl", [2.0, 0.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.1, 0.9, &mut vertices, &mut indices),
-        geom::model::Model::new("STL/pyramid.stl", [-2.0, -1.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.9, 0.1, &mut vertices, &mut indices),
+        // geom::model::Model::new("STL/pyramid.stl", [-2.0, -1.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.9, 0.1, &mut vertices, &mut indices),
         // geom::model::Model::new("STL/monkey.stl", [0.0, 1.0, 8.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, &mut vertices, &mut indices),
-        geom::model::Model::new("STL/ground.stl", [0.0, -1.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.0, 1.0, &mut vertices, &mut indices),
+        // geom::model::Model::new("STL/ground.stl", [0.0, -1.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.0, 1.0, &mut vertices, &mut indices),
     ];
 
     /*
@@ -51,7 +57,7 @@ fn main() {
     */
 
     let ds_builder = move |_size: PhysicalSize<u32>, _device: Arc<Device>, _queue: Arc<Queue>, _layout| {
-        let scale = 0.5;
+        let scale = 1.0;
         let camera_speed = 0.5;
         let _size = PhysicalSize::new((_size.width as f32 * scale) as u32, (_size.height as f32 * scale) as u32);
         let bu = BufferUsage {
@@ -74,13 +80,13 @@ fn main() {
 
         let sphere_buffer = {
             let mut spheres = vec![
-                Sphere::new([0.0, 0.0, 20.0], [0.0, 0.0, 1.0, 1.0], 3.0, 0.5, 0.5),
+                Sphere::new([0.0, 0.0, 20.0], [0.0, 0.0, 1.0, 1.0], 3.0, 0.5, 0.5, 0),
             ];
 
             let s = 10;
             for i in 0..s {
                 let angle = i as f32 * (2.0 * PI / s as f32);
-                spheres.push(Sphere::new([angle.cos() * 4.0, 0.0, angle.sin() * 4.0 + 20.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, 0.5));
+                spheres.push(Sphere::new([angle.cos() * 4.0, 0.0, angle.sin() * 4.0 + 20.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, 0.5, 0));
             }
     
             util::build_cpu_buffer(_device.clone(), bu, spheres).unwrap()
@@ -96,14 +102,28 @@ fn main() {
         let light_buffer = {
             let lights = vec![
                 // light::PointLight::new(Vec3::new(0.0, 10.0, 10.0), Vec3::new(1.0, 1.0, 1.0), 3.0),
-                light::PointLight::new(Vec3::new(0.0, 5.0, 10.0), Vec3::new(1.0, 1.0, 1.0), 20.0),
-                light::PointLight::new(Vec3::new(-10.0, 10.0, 5.0), Vec3::new(0.0, 0.0, 1.0), 20.0),
+                light::PointLight::new(Vec3::new(0.0, 5.0, 10.0), Vec3::new(1.0, 1.0, 1.0), 50.0),
+                light::PointLight::new(Vec3::new(-10.0, 10.0, 5.0), Vec3::new(0.0, 0.0, 1.0), 50.0),
                 // light::PointLight::new(Vec3::new(0.0, 10.0, 5.0), Vec3::new(0.0, 0.0, 1.0), 20.0),
                 // light::PointLight::new(Vec3::new(10.0, 10.0, 10.0), Vec3::new(0.0, 1.0, 0.0), 100.0),
             ];
 
             util::build_cpu_buffer(_device.clone(), bu, lights).unwrap()
         };
+
+        let base_texture_image = image::open("Images/grid.jpg").unwrap().into_rgba8();
+        let (w, h) = base_texture_image.dimensions();
+        
+        println!("W: {}, H: {}", w, h);
+
+        let base_texture_data = base_texture_image.as_raw();
+
+        let (base_texture, init) = ImmutableImage::from_iter(base_texture_data.iter().cloned(), ImageDimensions::Dim2d { width: w, height: h, array_layers: 1}, MipmapsCount::One, Format::R8G8B8A8Unorm, _queue.clone()).unwrap();
+        init.then_signal_fence_and_flush().unwrap()
+            .wait(None).unwrap();
+
+        let base_texture_view = ImageView::new(base_texture).unwrap();
+        let base_texture_sampler = Sampler::simple_repeat_linear(_device.clone());
 
         let ds = PersistentDescriptorSet::start(_layout)
             .add_image(output_img_view).unwrap()
@@ -113,6 +133,10 @@ fn main() {
             .add_buffer(vertex_buffer.clone()).unwrap()
             .add_buffer(indice_buffer.clone()).unwrap()
             .add_buffer(light_buffer.clone()).unwrap()
+            .enter_array().unwrap()
+            .add_sampled_image(base_texture_view.clone(), base_texture_sampler.clone()).unwrap()
+            .leave_array().unwrap()
+            // .add_sampled_image(texture_view, sampler).unwrap()
             .build().unwrap();
 
         let dispatch = [_size.width / 8, _size.width / 8, 1];
@@ -170,13 +194,13 @@ fn main() {
                     t += 0.001;
                     match sphere_buffer.write() {
                         Ok(mut sb) => {
-                            // let r = Quaternion::from_axis(Vec3::new(0.0, 1.0, 0.0), 0.001);
-                            let r = Quaternion::new(0.0, 0.0, 0.0, 1.0);
+                            let r = Quaternion::from_axis(Vec3::new(0.0, 1.0, 0.0), 0.001);
+                            // let r = Quaternion::new(0.0, 0.0, 0.0, 1.0);
 
                             for i in 1..sb.len() {
-                                let pos = Vec3::new(sb[i].pos[0], sb[i].pos[1], sb[i].pos[2] - 20.0);
-                                let pos = r.transform_point(pos);
-                                sb[i].pos = [pos.x, pos.y, pos.z + 20.0, 0.0];
+                                let mut pos = Vec3::new(sb[i].pos[0], sb[i].pos[1], sb[i].pos[2]);
+                                pos = r.transform_around(pos, [0.0, 0.0, 20.0].into());
+                                sb[i].pos = [pos.x, pos.y, pos.z, 0.0];
                             }
                         },
                         _ => ()
@@ -185,13 +209,14 @@ fn main() {
                     match light_buffer.write() {
                         Ok(mut lb) => {
                             let r = Quaternion::from_axis([0.0, 1.0, 0.0].into(), 0.001);
-                            let mut pos = Vec3::new(lb[1].pos[0], lb[1].pos[1], lb[1].pos[2] - 10.0);
-                            pos = r.transform_point(pos);
+
+                            let mut pos = Vec3::new(lb[1].pos[0], lb[1].pos[1], lb[1].pos[2]);
+                            pos = r.transform_around(pos, [0.0, 0.0, 20.0].into());
 
                             lb[1].pos = [
                                 pos.x,
                                 pos.y,
-                                pos.z + 10.0,
+                                pos.z + 20.0,
                                 0.0
                             ];
                         },
@@ -219,6 +244,7 @@ fn main() {
     shader_layout.add_buffer(0, false);
     shader_layout.add_buffer(0, false);
     shader_layout.add_buffer(0, false);
+    shader_layout.add_sampled_image_array(0, 1, true);
     // shader_layout.add_buffer(0, false);
     shader_layout.add_push_constant_range(0, 32);
 

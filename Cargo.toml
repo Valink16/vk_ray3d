@@ -10,3 +10,4 @@ edition = "2018"
 compute_vk = { path = "./compute_vk" }
 nalgebra-glm = "0.11.0"
 stl_io = "0.6.0"
+image = "0.23.14"

@@ -30,6 +30,11 @@ impl Quaternion {
         let inv = Quaternion { v: -self.v, s: self.s };
         (self * &Quaternion { v: p, s: 0.0 } * inv).v
     }
+
+    pub fn transform_around(&self, p: Vec3, around: Vec3) -> Vec3 {
+        let offset_p = p - around;
+        self.transform_point(offset_p) + around
+    } 
 }
 
 impl Mul for &Quaternion {

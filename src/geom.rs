@@ -7,11 +7,11 @@ pub mod sphere {
 		pub r: f32,
 		pub reflexivity: f32,
 		pub diffuse_factor: f32,
-		_pad: f32
+		pub texture_index: u32,
 	}
 
 	impl Sphere {
-		pub fn new(pos: [f32; 3], col: [f32; 4], r: f32, reflexivity: f32, diffuse_factor: f32) -> Self {
+		pub fn new(pos: [f32; 3], col: [f32; 4], r: f32, reflexivity: f32, diffuse_factor: f32, texture_index: u32) -> Self {
 			let pos = [pos[0], pos[1], pos[2], 0.0];
 			Self {
 				pos,
@@ -19,7 +19,7 @@ pub mod sphere {
 				r,
 				reflexivity,
 				diffuse_factor,
-				_pad: 0.0
+				texture_index
 			}
 		}
 	}
@@ -58,7 +58,7 @@ pub mod sphere {
 
 			self.i += 1;
 			
-			Some(Sphere::new(pos, color.into(), self.r, 0.5, 0.5))
+			Some(Sphere::new(pos, color.into(), self.r, 0.5, 0.5, 0))
 		}
 	}
 

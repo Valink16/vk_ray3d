@@ -224,6 +224,44 @@ impl MainLayout {
         self.add_desc(set, desc);
     }
 
+    pub fn add_sampled_image(&mut self, set: usize, readonly: bool) {
+        let image_desc = DescriptorImageDesc {
+            sampled: true,
+            dimensions: DescriptorImageDescDimensions::TwoDimensional,
+            format: None,
+            multisampled: false,
+            array_layers: DescriptorImageDescArray::NonArrayed
+        };
+
+        let desc = DescriptorDesc {
+            ty: DescriptorDescTy::CombinedImageSampler(image_desc),
+            array_count: 1u32,
+            stages: ShaderStages::compute(),
+            readonly
+        };
+
+        self.add_desc(set, desc);
+    }
+
+    pub fn add_sampled_image_array(&mut self, set: usize, size: u32, readonly: bool) {
+        let image_desc = DescriptorImageDesc {
+            sampled: true,
+            dimensions: DescriptorImageDescDimensions::TwoDimensional,
+            format: None,
+            multisampled: false,
+            array_layers: DescriptorImageDescArray::NonArrayed
+        };
+
+        let desc = DescriptorDesc {
+            ty: DescriptorDescTy::CombinedImageSampler(image_desc),
+            array_count: size,
+            stages: ShaderStages::compute(),
+            readonly
+        };
+
+        self.add_desc(set, desc);
+    }
+
     pub fn add_desc(&mut self, set: usize, desc: DescriptorDesc) {
         let set = set as isize;
         if !(set < self.sets.len() as isize) {

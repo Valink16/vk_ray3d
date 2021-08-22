@@ -1,6 +1,6 @@
 #version 450
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
-layout(set = 0, binding = 0, r8) uniform writeonly image2D img;
+layout(set = 0, binding = 0) uniform writeonly image2D img;
 
 #include "consts.glsl"
 
@@ -15,6 +15,7 @@ struct Sphere {
     float r;
     float reflexivity; // When computing reflections, factor of the incoming light reflected
     float diffuse_factor; // When computing reflections, factor of the added diffuse light to the incoming reflected light
+    uint texture_index;
 };
 
 struct Model {
@@ -61,9 +62,13 @@ layout(set = 0, binding = 6, std430) buffer PointLights {
     PointLight point_lights[];
 };
 
-layout(set = 0, binding = 7, std430) buffer DirectionalLights {
+layout(set = 0, binding = 7) uniform sampler2D textures[1];
+
+/*
+layout(set = 0, binding = 8, std430) buffer DirectionalLights {
     DirectionalLight directional_lights[];
 };
+*/
 
 layout(push_constant) uniform Camera {
     vec4 pos;
@@ -89,7 +94,6 @@ void main() {
 
     vec4 col = vec4(0.0, 0.0, 0.0, 1.0);
 
-    /*
     uint closest_si;
     float closest_d = Ray_trace_to_Spheres(r, closest_si);
 
@@ -107,7 +111,7 @@ void main() {
         r.dir = reflect(r.dir, normal); // Used to iterate through reflections
         impact_points[0] = impact_point;
         impact_sindices[0] = closest_si;
-        impact_distances[0] = 0.0; // We choose arbitrarily to ignore the camera
+        impact_distances[0] = closest_d; // We choose arbitrarily to ignore the camera
 
         int i; // So we can keep track of when the for loop stopped for later
         for (i = 1; i < REFLECT_DEPTH; i++) {
@@ -122,7 +126,7 @@ void main() {
             impact_distances[i] = closest_d;
             
             normal = normalize(impact_points[i] - spheres[closest_si].pos);
-            r.origin = impact_points[i]; // New origin is the impact point
+            r.origin = impact_points[i] + normal * RAY_COLLISION_PRECISION; // New origin is the impact point
             r.dir = reflect(r.dir, normal); // Used to iterate through reflections
         }
 
@@ -130,21 +134,33 @@ void main() {
             --i; // or index out of range
 
             Sphere _sph = spheres[impact_sindices[i]];
-            vec3 reflected_color = PointLights_to_Sphere(impact_points[i], _sph, r) * _sph.col.xyz * _sph.diffuse_factor;
 
+            // Computing U, V coordinates for the sphere, https://en.wikipedia.org/wiki/UV_mapping
+            vec4 d = normalize(_sph.pos - impact_points[i]);
+            float u = 0.5 + atan(d.x, d.z) / 2 * PI;
+            float v = 0.5 - asin(d.y) / PI;
+
+            vec3 texture_color = texture(textures[0], vec2(u, v)).xyz;
+            vec3 reflected_color = PointLights_to_Sphere(impact_points[i], _sph, r) * texture_color * _sph.diffuse_factor;
+            
             for (int a = i - 1; a >= 0; a--) {
                 _sph = spheres[impact_sindices[a]];
                 // vec3 dif = PointLights_to_Sphere(impact_points[a], _sph, r) * _sph.diffuse_factor;
-                float df = 1 / (impact_distances[a + 1] * impact_distances[a + 1]);
-                reflected_color *= (_sph.col.xyz * _sph.reflexivity * df);
-                reflected_color += (PointLights_to_Sphere(impact_points[a], _sph, r) * _sph.col.xyz * _sph.diffuse_factor); // Add diffused light
+                float impact_dist = impact_distances[a]; 
+                if (impact_dist < 1.0) {
+                   impact_dist = 1.0;
+                }
+                float df = 1 / (impact_dist * impact_dist);
+                reflected_color *= (texture_color * _sph.reflexivity * df);
+                reflected_color += (PointLights_to_Sphere(impact_points[a], _sph, r) * texture_color * _sph.diffuse_factor); // Add diffused light
             }
 
             col = vec4((reflected_color), 1.0);
+            // col = texture(textures[0], vec2(0.05, 0.05));
         }
     }
-    */
 
+    /*
     uint closest_mi;
     uint closest_tri_index;
     float closest_model_dist = Ray_trace_to_Models(r, closest_mi, closest_tri_index);
@@ -226,69 +242,9 @@ void main() {
             }
             col = vec4(reflected_color, 1.0);
         }
-
-        // col += vec4(0.1);
-        
-        
-    }
-
-    /*
-    uint closest_si;
-    float closest_d = Ray_trace_to_Spheres(r, closest_si);
-
-    if (closest_si != SPHERES_LENGTH) {
-        // The following arrays store the data about the reflection to then bactrace from the last impact and find the final color
-        vec4 impact_points[REFLECT_DEPTH];
-        uint impact_sindices[REFLECT_DEPTH];
-        float impact_distances[REFLECT_DEPTH];
-
-        Sphere closest_s = spheres[closest_si];
-        vec4 impact_point = r.origin + r.dir * closest_d;
-        vec4 normal = normalize(impact_point - closest_s.pos);
-
-        r.origin = impact_point;
-        r.dir = reflect(r.dir, normal); // Used to iterate through reflections
-        impact_points[0] = impact_point;
-        impact_sindices[0] = closest_si;
-        impact_distances[0] = 0.0; // We choose arbitrarily to ignore the camera
-
-        int i; // So we can keep track of when the for loop stopped for later
-        for (i = 1; i < REFLECT_DEPTH; i++) {
-            closest_d = Ray_trace_to_Spheres(r, closest_si);
-            
-            if (closest_si == SPHERES_LENGTH) { // No collision, so stop the loop, because the ray "goes" into infinity
-                break;
-            }
-
-            impact_points[i] = r.origin + r.dir * closest_d;
-            impact_sindices[i] = closest_si;
-            impact_distances[i] = closest_d;
-            
-            normal = normalize(impact_points[i] - spheres[closest_si].pos);
-            r.origin = impact_points[i]; // New origin is the impact point
-            r.dir = reflect(r.dir, normal); // Used to iterate through reflections
-        }
-
-        if (i > 0) {
-            --i; // or index out of range
-
-            Sphere _sph = spheres[impact_sindices[i]];
-            vec3 reflected_color = PointLights_to_Sphere(impact_points[i], _sph, r) * _sph.col.xyz * _sph.diffuse_factor;
-
-            for (int a = i - 1; a >= 0; a--) {
-                _sph = spheres[impact_sindices[a]];
-                // vec3 dif = PointLights_to_Sphere(impact_points[a], _sph, r) * _sph.diffuse_factor;
-                float df = 1 / (impact_distances[a + 1] * impact_distances[a + 1]);
-                reflected_color *= (_sph.col.xyz * _sph.reflexivity * df);
-                reflected_color += (PointLights_to_Sphere(impact_points[a], _sph, r) * _sph.col.xyz * _sph.diffuse_factor); // Add diffused light
-            }
-
-            col = vec4((reflected_color), 1.0);
-        }
     }
     */
     
-
     imageStore(img, ivec2(gl_GlobalInvocationID.xy), col);
 }
 
