@@ -25,6 +25,7 @@ mod geom;
 mod light;
 mod camera;
 mod quaternion;
+mod texture;
 
 fn main() {
     let mut vertices = Vec::<[f32; 4]>::new();
@@ -86,7 +87,7 @@ fn main() {
             let s = 10;
             for i in 0..s {
                 let angle = i as f32 * (2.0 * PI / s as f32);
-                spheres.push(Sphere::new([angle.cos() * 4.0, 0.0, angle.sin() * 4.0 + 20.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, 0.5, 0));
+                spheres.push(Sphere::new([angle.cos() * 4.0, 0.0, angle.sin() * 4.0 + 20.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, 0.5, 1));
             }
     
             util::build_cpu_buffer(_device.clone(), bu, spheres).unwrap()
@@ -111,19 +112,9 @@ fn main() {
             util::build_cpu_buffer(_device.clone(), bu, lights).unwrap()
         };
 
-        let base_texture_image = image::open("Images/grid.jpg").unwrap().into_rgba8();
-        let (w, h) = base_texture_image.dimensions();
-        
-        println!("W: {}, H: {}", w, h);
 
-        let base_texture_data = base_texture_image.as_raw();
-
-        let (base_texture, init) = ImmutableImage::from_iter(base_texture_data.iter().cloned(), ImageDimensions::Dim2d { width: w, height: h, array_layers: 1}, MipmapsCount::One, Format::R8G8B8A8Unorm, _queue.clone()).unwrap();
-        init.then_signal_fence_and_flush().unwrap()
-            .wait(None).unwrap();
-
-        let base_texture_view = ImageView::new(base_texture).unwrap();
-        let base_texture_sampler = Sampler::simple_repeat_linear(_device.clone());
+        let (base_texture_view, base_texture_sampler) = texture::load_texture("Images/blue.png", _device.clone(), _queue.clone());
+        let (bw_texture_view, bw_texture_sampler) = texture::load_texture("Images/grid.jpg", _device.clone(), _queue.clone());
 
         let ds = PersistentDescriptorSet::start(_layout)
             .add_image(output_img_view).unwrap()
@@ -135,6 +126,7 @@ fn main() {
             .add_buffer(light_buffer.clone()).unwrap()
             .enter_array().unwrap()
             .add_sampled_image(base_texture_view.clone(), base_texture_sampler.clone()).unwrap()
+            .add_sampled_image(bw_texture_view.clone(), bw_texture_sampler.clone()).unwrap()
             .leave_array().unwrap()
             // .add_sampled_image(texture_view, sampler).unwrap()
             .build().unwrap();
@@ -244,7 +236,7 @@ fn main() {
     shader_layout.add_buffer(0, false);
     shader_layout.add_buffer(0, false);
     shader_layout.add_buffer(0, false);
-    shader_layout.add_sampled_image_array(0, 1, true);
+    shader_layout.add_sampled_image_array(0, 2, true);
     // shader_layout.add_buffer(0, false);
     shader_layout.add_push_constant_range(0, 32);
 

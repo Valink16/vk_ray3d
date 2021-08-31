@@ -1,4 +1,4 @@
-const float RAY_COLLISION_PRECISION = 0.001;
+const float RAY_COLLISION_PRECISION = 0.01;
 const uint REFLECT_DEPTH = 5;
 const uint FACE_COUNT = 100;
 const float PI = 3.1415926538;
