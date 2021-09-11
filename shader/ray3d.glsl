@@ -62,13 +62,11 @@ layout(set = 0, binding = 6, std430) buffer PointLights {
     PointLight point_lights[];
 };
 
-layout(set = 0, binding = 7) uniform sampler2D textures[2];
-
-/*
-layout(set = 0, binding = 8, std430) buffer DirectionalLights {
+layout(set = 0, binding = 7, std430) buffer DirectionalLights {
     DirectionalLight directional_lights[];
 };
-*/
+
+layout(set = 0, binding = 8) uniform sampler2D textures[2];
 
 layout(push_constant) uniform Camera {
     vec4 pos;
@@ -77,7 +75,8 @@ layout(push_constant) uniform Camera {
 
 uint SPHERES_LENGTH = spheres.length();
 uint MODELS_LENGTH = models.length();
-uint LIGHTS_COUNT = point_lights.length();
+uint POINT_LIGHTS_COUNT = point_lights.length();
+uint DIR_LIGHTS_COUNT = directional_lights.length();
 
 #include "quaternion.glsl"
 #include "sphere.glsl"
@@ -137,8 +136,8 @@ void main() {
 
             // Computing U, V coordinates for the sphere, https://en.wikipedia.org/wiki/UV_mapping
             vec4 d = normalize(_sph.pos - impact_points[i]);
-            float u = 0.5 + atan(d.x, d.z) / 2 * PI;
-            float v = 0.5 - asin(d.y) / PI;
+            float u = 0.5 + atan(d.x, d.z);
+            float v = 0.5 - asin(d.y);
 
             vec3 texture_color = texture(textures[_sph.texture_index], vec2(u, v)).xyz;
             vec3 reflected_color = PointLights_to_Sphere(impact_points[i], _sph, r) * texture_color * _sph.diffuse_factor;
@@ -148,14 +147,14 @@ void main() {
                 // vec3 dif = PointLights_to_Sphere(impact_points[a], _sph, r) * _sph.diffuse_factor;
                 // Computing U, V coordinates for the sphere, https://en.wikipedia.org/wiki/UV_mapping
                 vec4 d = normalize(_sph.pos - impact_points[a]);
-                float u = 0.5 + atan(d.x, d.z) / 2 * PI;
-                float v = 0.5 - asin(d.y) / PI;
+                float u = 0.5 + atan(d.x, d.z);
+                float v = 0.5 - asin(d.y);
 
                 vec3 texture_color = texture(textures[_sph.texture_index], vec2(u, v)).xyz;
                 
                 float impact_dist = impact_distances[a + 1];
 
-                float df = min(1.0, 1 / (impact_dist * impact_dist));
+                float df = 1 / (impact_dist * impact_dist);
                 reflected_color *= (texture_color * _sph.reflexivity * df);
                 reflected_color += (PointLights_to_Sphere(impact_points[a], _sph, r) * texture_color * _sph.diffuse_factor); // Add diffused light
             }

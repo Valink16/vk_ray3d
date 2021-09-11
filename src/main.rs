@@ -101,7 +101,7 @@ fn main() {
         let indice_buffer = util::build_local_buffer(_device.clone(), _queue.clone(), BufferUsage::all(), indices).unwrap();
 
         let light_buffer = {
-            let lights = vec![
+            let lights: Vec::<light::PointLight> = vec![
                 // light::PointLight::new(Vec3::new(0.0, 10.0, 10.0), Vec3::new(1.0, 1.0, 1.0), 3.0),
                 light::PointLight::new(Vec3::new(0.0, 5.0, 10.0), Vec3::new(1.0, 1.0, 1.0), 50.0),
                 light::PointLight::new(Vec3::new(-10.0, 10.0, 5.0), Vec3::new(0.0, 0.0, 1.0), 50.0),
@@ -112,10 +112,18 @@ fn main() {
             util::build_cpu_buffer(_device.clone(), bu, lights).unwrap()
         };
 
+        let dir_light_buffer = {
+            let dir_lights: Vec::<light::DirectionalLight> = vec![
+                light::DirectionalLight::new(Vec3::new(-1.0, -1.0, -1.0).normalize(), Vec3::new(1.0, 1.0, 1.0)),
+                // light::DirectionalLight::new(Vec3::new(-10.0, 10.0, 5.0), Vec3::new(0.0, 0.0, 1.0)),
+            ];
+
+            util::build_cpu_buffer(_device.clone(), bu, dir_lights).unwrap()
+        };
 
         let (base_texture_view, base_texture_sampler) = texture::load_texture("Images/blue.png", _device.clone(), _queue.clone());
         let (bw_texture_view, bw_texture_sampler) = texture::load_texture("Images/grid.jpg", _device.clone(), _queue.clone());
-
+        
         let ds = PersistentDescriptorSet::start(_layout)
             .add_image(output_img_view).unwrap()
             .add_buffer(ray_buffer.clone()).unwrap()
@@ -124,6 +132,7 @@ fn main() {
             .add_buffer(vertex_buffer.clone()).unwrap()
             .add_buffer(indice_buffer.clone()).unwrap()
             .add_buffer(light_buffer.clone()).unwrap()
+            .add_buffer(dir_light_buffer.clone()).unwrap()
             .enter_array().unwrap()
             .add_sampled_image(base_texture_view.clone(), base_texture_sampler.clone()).unwrap()
             .add_sampled_image(bw_texture_view.clone(), bw_texture_sampler.clone()).unwrap()
@@ -200,6 +209,7 @@ fn main() {
 
                     match light_buffer.write() {
                         Ok(mut lb) => {
+                            /*
                             let r = Quaternion::from_axis([0.0, 1.0, 0.0].into(), 0.001);
 
                             let mut pos = Vec3::new(lb[1].pos[0], lb[1].pos[1], lb[1].pos[2]);
@@ -211,6 +221,7 @@ fn main() {
                                 pos.z + 20.0,
                                 0.0
                             ];
+                            */
                         },
                         _ => ()
                     }
@@ -230,6 +241,7 @@ fn main() {
     
     let mut shader_layout = loader::MainLayout::new();
     shader_layout.add_image(0);
+    shader_layout.add_buffer(0, false);
     shader_layout.add_buffer(0, false);
     shader_layout.add_buffer(0, false);
     shader_layout.add_buffer(0, false);
