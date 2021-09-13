@@ -39,3 +39,12 @@ float Ray_trace_to_Spheres(Ray r, out uint closest_si) {
 
     return closest_d;
 }
+
+vec3 Sphere_texture_value(Sphere s, vec4 impact_point) {
+    // Computing U, V coordinates for the sphere, https://en.wikipedia.org/wiki/UV_mapping
+    vec4 d = normalize(s.pos - impact_point);
+    float u = 0.5 + atan(d.x, d.z);
+    float v = 0.5 - asin(d.y);
+
+    return texture(textures[s.texture_index], vec2(u, v)).xyz;
+}

@@ -24,16 +24,16 @@ impl PointLight {
 pub struct DirectionalLight {
 	pub direction: [f32; 4],
 	pub col: [f32; 3],
-	_pad: f32
+	pub intensity: f32
 }
 
 impl DirectionalLight {
-	pub fn new(direction: Vec3, col: Vec3) -> Self {
+	pub fn new(direction: Vec3, col: Vec3, intensity: f32) -> Self {
 		let direction = Vec4::new(direction.x, direction.y, direction.z, 0.0);
 		Self {
 			direction: direction.into(),
 			col: col.into(),
-			_pad: 0.0
+			intensity
 		}
 	}
 }

@@ -36,6 +36,7 @@ struct PointLight {
 struct DirectionalLight {
     vec4 dir;
     vec3 col;
+    float intensity;
 };
 
 layout(set = 0, binding = 1, std430) buffer Rays {
@@ -54,19 +55,27 @@ layout(set = 0, binding = 4, std430) buffer Vertices {
     vec3 vertices[];
 };
 
-layout(set = 0, binding = 5, std430) buffer Indices {
+layout(set = 0, binding = 5, std430) buffer UVs {
+    vec2 uvs[];
+};
+
+layout(set = 0, binding = 6, std430) buffer Indices {
     uvec3 indices[];
 };
 
-layout(set = 0, binding = 6, std430) buffer PointLights {
+layout(set = 0, binding = 7, std430) buffer Normals {
+    vec3 normals[];
+};
+
+layout(set = 0, binding = 8, std430) buffer PointLights {
     PointLight point_lights[];
 };
 
-layout(set = 0, binding = 7, std430) buffer DirectionalLights {
+layout(set = 0, binding = 9, std430) buffer DirectionalLights {
     DirectionalLight directional_lights[];
 };
 
-layout(set = 0, binding = 8) uniform sampler2D textures[2];
+layout(set = 0, binding = 10) uniform sampler2D textures[2];
 
 layout(push_constant) uniform Camera {
     vec4 pos;
@@ -93,6 +102,7 @@ void main() {
 
     vec4 col = vec4(0.0, 0.0, 0.0, 1.0);
 
+    /*
     uint closest_si;
     float closest_d = Ray_trace_to_Spheres(r, closest_si);
 
@@ -112,6 +122,8 @@ void main() {
         impact_sindices[0] = closest_si;
         impact_distances[0] = closest_d; // We choose arbitrarily to ignore the camera
 
+        vec3 skybox_emissive = vec3(0.0);
+        
         int i; // So we can keep track of when the for loop stopped for later
         for (i = 1; i < REFLECT_DEPTH; i++) {
             closest_d = Ray_trace_to_Spheres(r, closest_si);
@@ -134,23 +146,15 @@ void main() {
 
             Sphere _sph = spheres[impact_sindices[i]];
 
-            // Computing U, V coordinates for the sphere, https://en.wikipedia.org/wiki/UV_mapping
-            vec4 d = normalize(_sph.pos - impact_points[i]);
-            float u = 0.5 + atan(d.x, d.z);
-            float v = 0.5 - asin(d.y);
-
-            vec3 texture_color = texture(textures[_sph.texture_index], vec2(u, v)).xyz;
+            vec3 texture_color = Sphere_texture_value(_sph, impact_points[i]);
             vec3 reflected_color = PointLights_to_Sphere(impact_points[i], _sph, r) * texture_color * _sph.diffuse_factor;
             
             for (int a = i - 1; a >= 0; a--) {
                 _sph = spheres[impact_sindices[a]];
                 // vec3 dif = PointLights_to_Sphere(impact_points[a], _sph, r) * _sph.diffuse_factor;
                 // Computing U, V coordinates for the sphere, https://en.wikipedia.org/wiki/UV_mapping
-                vec4 d = normalize(_sph.pos - impact_points[a]);
-                float u = 0.5 + atan(d.x, d.z);
-                float v = 0.5 - asin(d.y);
-
-                vec3 texture_color = texture(textures[_sph.texture_index], vec2(u, v)).xyz;
+                
+                vec3 texture_color = Sphere_texture_value(_sph, impact_points[a]);
                 
                 float impact_dist = impact_distances[a + 1];
 
@@ -164,21 +168,20 @@ void main() {
             // col = texture(textures[0], vec2(0.05, 0.05));
         }
     }
+    */
 
-    /*
     uint closest_mi;
     uint closest_tri_index;
     float closest_model_dist = Ray_trace_to_Models(r, closest_mi, closest_tri_index);
-    float _diffuse_factor = 0.5;
-    float _reflexivity = 1.0;
 
     if (closest_mi != MODELS_LENGTH) {
         Model _mod = models[closest_mi];
 
         vec4 impact_point = r.origin + r.dir * closest_model_dist;
         
-        col.xyz = PointLights_to_Model(impact_point, _mod, r, closest_tri_index) * _mod.col.xyz * _diffuse_factor;
-        
+        // col.xyz = _mod.col.xyz;
+        col.xyz = PointLights_to_Model(impact_point, _mod, r, closest_tri_index) * _mod.col.xyz * _mod.diffuse_factor;
+        /*
         vec4 impact_points[REFLECT_DEPTH];
         uint impact_sindices[REFLECT_DEPTH];
         uint tri_indices[REFLECT_DEPTH]; // Stores the triangle index for each reflection
@@ -189,9 +192,10 @@ void main() {
         // vec4 normal = normalize(impact_point - closest_m.pos);
         
         // Compute normal with the triangle
-        vec3 AB = vertices[indices[closest_tri_index][1]] - vertices[indices[closest_tri_index][0]]; // B - A
-        vec3 AC = vertices[indices[closest_tri_index][2]] - vertices[indices[closest_tri_index][0]]; // C - A
-        vec4 normal = vec4(normalize(cross(AC, AB)), 0.0);
+        // vec3 AB = vertices[indices[closest_tri_index][1]] - vertices[indices[closest_tri_index][0]]; // B - A
+        // vec3 AC = vertices[indices[closest_tri_index][2]] - vertices[indices[closest_tri_index][0]]; // C - A
+        // vec4 normal = vec4(normalize(cross(AC, AB)), 0.0);
+        vec4 normal = vec4(normals[closest_tri_index], 0.0);
 
         r.origin = impact_point;
         r.dir = reflect(r.dir, normal); // Used to iterate through reflections
@@ -215,12 +219,12 @@ void main() {
             impact_distances[i] = closest_model_dist;
             total_distance += closest_model_dist;
             
-            // normal = normalize(impact_points[i] - models[closest_mi].pos);
-            AB = vertices[indices[closest_tri_index][1]] - vertices[indices[closest_tri_index][0]]; // B - A
-            AC = vertices[indices[closest_tri_index][2]] - vertices[indices[closest_tri_index][0]]; // C - A
-            normal = vec4(normalize(cross(AC, AB)), 0.0);
+            // AB = vertices[indices[closest_tri_index][1]] - vertices[indices[closest_tri_index][0]]; // B - A
+            // AC = vertices[indices[closest_tri_index][2]] - vertices[indices[closest_tri_index][0]]; // C - A
+            // normal = vec4(normalize(cross(AC, AB)), 0.0);
+            normal = vec4(normals[closest_tri_index], 0.0);
 
-            r.origin = impact_points[i]; // New origin is the impact point
+            r.origin = impact_points[i] + normal * RAY_COLLISION_PRECISION; // New origin is the impact point
             r.dir = reflect(r.dir, normal); // Used to iterate through reflections
         }
 
@@ -247,8 +251,8 @@ void main() {
             }
             col = vec4(reflected_color, 1.0);
         }
+        */
     }
-    */
     
     imageStore(img, ivec2(gl_GlobalInvocationID.xy), col);
 }

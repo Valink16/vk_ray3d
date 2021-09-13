@@ -16,6 +16,7 @@ use vulkano::buffer::{BufferUsage, CpuAccessibleBuffer};
 use vulkano::command_buffer::AutoCommandBufferBuilder;
 use winit::{dpi::PhysicalSize, event};
 
+use std::process::exit;
 use std::{f32::consts::PI, sync::Arc};
 
 use crate::{geom::sphere::Sphere, quaternion::Quaternion};
@@ -29,16 +30,30 @@ mod texture;
 
 fn main() {
     let mut vertices = Vec::<[f32; 4]>::new();
+    let mut uvs = Vec::<[f32; 2]>::new();
     let mut indices = Vec::<[u32; 4]>::new();
+    let mut normals = Vec::<[f32; 4]>::new();
     
     let models: Vec<geom::model::Model> = vec![
         // geom::model::Model::new("STL/cube.stl", [-2.0, 0.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, &mut vertices, &mut indices),
-        geom::model::Model::new("STL/cube.stl", [2.0, 0.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.1, 0.9, &mut vertices, &mut indices),
+        // geom::model::Model::from_stl("STL/cube.stl", [2.0, 0.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.1, 0.9, &mut vertices, &mut indices, &mut normals),
+        // geom::model::Model::from_obj("OBJ/cube.obj", [0.0, 0.0, 10.0], [1.0, 1.0, 1.0, 0.0], 0.5, 0.5, &mut vertices, &mut uvs, &mut indices, &mut normals)
+        geom::model::Model::from_obj("OBJ/tri.obj", [0.0, 0.0, 10.0], [1.0, 1.0, 1.0, 0.0], 0.5, 0.5, &mut vertices, &mut uvs, &mut indices, &mut normals)
         // geom::model::Model::new("STL/pyramid.stl", [-2.0, -1.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.9, 0.1, &mut vertices, &mut indices),
         // geom::model::Model::new("STL/monkey.stl", [0.0, 1.0, 8.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, &mut vertices, &mut indices),
         // geom::model::Model::new("STL/ground.stl", [0.0, -1.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.0, 1.0, &mut vertices, &mut indices),
     ];
 
+    dbg!(&models[0]);
+    dbg!(&vertices);
+    dbg!(&normals);
+    dbg!(&indices);
+
+    dbg!(normals.len());
+    dbg!(indices.len());
+    dbg!(vertices.len());
+    dbg!(uvs.len());
+    
     /*
     let models = vec![
         geom::model::Model {
@@ -81,7 +96,7 @@ fn main() {
 
         let sphere_buffer = {
             let mut spheres = vec![
-                Sphere::new([0.0, 0.0, 20.0], [0.0, 0.0, 1.0, 1.0], 3.0, 0.5, 0.5, 0),
+                Sphere::new([0.0, 0.0, 20.0], [0.0, 0.0, 1.0, 1.0], 3.0, 0.9, 0.1, 0),
             ];
 
             let s = 10;
@@ -98,13 +113,15 @@ fn main() {
         };
 
         let vertex_buffer = util::build_local_buffer(_device.clone(), _queue.clone(), BufferUsage::all(), vertices).unwrap();
+        let uv_buffer = util::build_local_buffer(_device.clone(), _queue.clone(), BufferUsage::all(), uvs).unwrap();
         let indice_buffer = util::build_local_buffer(_device.clone(), _queue.clone(), BufferUsage::all(), indices).unwrap();
+        let normal_buffer = util::build_local_buffer(_device.clone(), _queue.clone(), BufferUsage::all(), normals).unwrap();
 
         let light_buffer = {
             let lights: Vec::<light::PointLight> = vec![
                 // light::PointLight::new(Vec3::new(0.0, 10.0, 10.0), Vec3::new(1.0, 1.0, 1.0), 3.0),
-                light::PointLight::new(Vec3::new(0.0, 5.0, 10.0), Vec3::new(1.0, 1.0, 1.0), 50.0),
-                light::PointLight::new(Vec3::new(-10.0, 10.0, 5.0), Vec3::new(0.0, 0.0, 1.0), 50.0),
+                // light::PointLight::new(Vec3::new(-15.0, 10.0, 0.0), Vec3::new(1.0, 1.0, 1.0), 200.0),
+                // light::PointLight::new(Vec3::new(-20.0, 0.0, 10.0), Vec3::new(1.0, 1.0, 1.0), 200.0),
                 // light::PointLight::new(Vec3::new(0.0, 10.0, 5.0), Vec3::new(0.0, 0.0, 1.0), 20.0),
                 // light::PointLight::new(Vec3::new(10.0, 10.0, 10.0), Vec3::new(0.0, 1.0, 0.0), 100.0),
             ];
@@ -114,7 +131,7 @@ fn main() {
 
         let dir_light_buffer = {
             let dir_lights: Vec::<light::DirectionalLight> = vec![
-                light::DirectionalLight::new(Vec3::new(-1.0, -1.0, -1.0).normalize(), Vec3::new(1.0, 1.0, 1.0)),
+                light::DirectionalLight::new(Vec3::new(0.0, -1.0, 0.0).normalize(), Vec3::new(1.0, 1.0, 1.0), 1.0),
                 // light::DirectionalLight::new(Vec3::new(-10.0, 10.0, 5.0), Vec3::new(0.0, 0.0, 1.0)),
             ];
 
@@ -130,7 +147,9 @@ fn main() {
             .add_buffer(sphere_buffer.clone()).unwrap()
             .add_buffer(model_buffer.clone()).unwrap()
             .add_buffer(vertex_buffer.clone()).unwrap()
+            .add_buffer(uv_buffer.clone()).unwrap()
             .add_buffer(indice_buffer.clone()).unwrap()
+            .add_buffer(normal_buffer.clone()).unwrap()
             .add_buffer(light_buffer.clone()).unwrap()
             .add_buffer(dir_light_buffer.clone()).unwrap()
             .enter_array().unwrap()
@@ -241,6 +260,8 @@ fn main() {
     
     let mut shader_layout = loader::MainLayout::new();
     shader_layout.add_image(0);
+    shader_layout.add_buffer(0, false);
+    shader_layout.add_buffer(0, false);
     shader_layout.add_buffer(0, false);
     shader_layout.add_buffer(0, false);
     shader_layout.add_buffer(0, false);

@@ -82,7 +82,8 @@ vec3 PointLights_to_Model(vec4 impact_point, Model closest_m, Ray r, uint tri_in
 	// Compute normal with the triangle
 	vec3 AB = vertices[indices[tri_index][1]] - vertices[indices[tri_index][0]]; // B - A
 	vec3 AC = vertices[indices[tri_index][2]] - vertices[indices[tri_index][0]]; // C - A
-	vec4 normal = vec4(normalize(cross(AC, AB)), 0.0);
+	vec4 normal = vec4(normalize(cross(AB, AC)), 0.0);
+	// vec4 normal = -vec4(normals[tri_index], 0.0);
 
 	impact_point += normal * RAY_COLLISION_PRECISION; // Shift the impact point a bit outward to limit the dotty effect
 
@@ -141,7 +142,7 @@ vec3 PointLights_to_Model(vec4 impact_point, Model closest_m, Ray r, uint tri_in
 		Ray_trace_to_Models(ray_to_light, closest_mi, _tri_index);
 		
 		if (closest_mi == MODELS_LENGTH) { // Means no collisions detected, thus no shadow, so we need to compute the color for the current light
-
+			float to_light_sq_dist = dot(to_light, to_light);
 			
 			/*
 			vec4 normal = impact_point - closest_s.pos;
@@ -163,7 +164,7 @@ vec3 PointLights_to_Model(vec4 impact_point, Model closest_m, Ray r, uint tri_in
 
 			float diffusion_factor = clamp(dot(normal, to_light) / length(to_light), 0.0, 1.0);
 
-			final_color += light.col * diffusion_factor;
+			final_color += light.col * light.intensity * diffusion_factor;
 		}
 	}
 

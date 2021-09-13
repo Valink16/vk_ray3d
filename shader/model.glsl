@@ -23,7 +23,7 @@ float Ray_dist_to_Triangle(Ray r, vec3 A, vec3 B, vec3 C) {
 	vec3 AC_cross_neg_d = cross(AC, -d);
 	float detm = dot(AB, AC_cross_neg_d);
 
-	if (detm == 0) { // Ray is parallel to the triangle
+	if (detm <= 0) { // Ray is parallel to the triangle
 		return -1.0;
 	}
 

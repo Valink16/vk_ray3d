@@ -71,7 +71,10 @@ pub mod sphere {
 
 pub mod model {
 	use stl_io;
+	use tobj;
 	use std::fs;
+	use std::path::Path;
+	use std::fmt::Debug;
 
 	#[repr(C)]
 	#[derive(Debug, Clone, Copy)]
@@ -85,17 +88,86 @@ pub mod model {
 	}
 
 	impl Model {
-		pub fn new(name: &str, pos: [f32; 3], col: [f32; 4], reflexivity: f32, diffuse_factor: f32, vertices: &mut Vec<[f32; 4]>, indices: &mut Vec<[u32; 4]>) -> Self {
+		pub fn from_obj<P: AsRef<Path> + Debug>(name: P, pos: [f32; 3], col: [f32; 4], reflexivity: f32, diffuse_factor: f32, vertices: &mut Vec<[f32; 4]>, uvs: &mut Vec<[f32; 2]>,  indices: &mut Vec<[u32; 4]>, normals: &mut Vec<[f32; 4]>) -> Self {
 			let pos = [pos[0], pos[1], pos[2], 0.0];
 			let vertices_offset = vertices.len() as u32;
 			let indices_start = indices.len() as u32;
 
+			let (models, _mats)  = tobj::load_obj(&name,
+				&tobj::LoadOptions {
+					single_index: true,
+					triangulate: true,
+					// reorder_data: true,
+					.. Default::default()
+				}
+			).expect(&format!("Failed to load {:?}", name));
+
+			for model in models {
+				let mesh = model.mesh;
+
+				assert_eq!(mesh.positions.len() % 3, 0);
+				assert_eq!(mesh.texcoords.len() % 2, 0);
+				assert_eq!(mesh.indices.len() % 3, 0);
+				assert_eq!(mesh.normals.len() % 3, 0);
+
+				for pos_i in (0..mesh.positions.len()).step_by(3) {
+					vertices.push([
+						mesh.positions[pos_i],
+						mesh.positions[pos_i + 1],
+						mesh.positions[pos_i + 2],
+						0.0
+					])
+				}
+
+				for uv_i in (0..mesh.texcoords.len()).step_by(2) { // Step by 2 for UVs
+					uvs.push([
+						mesh.texcoords[uv_i],
+						mesh.texcoords[uv_i + 1]
+					])
+				}
+
+				for indice_i in (0..mesh.indices.len()).step_by(3) {
+					indices.push([
+						mesh.indices[indice_i],
+						mesh.indices[indice_i + 1],
+						mesh.indices[indice_i + 2],
+						0
+					])
+				}
+
+				for normal_i in (0..mesh.normals.len()).step_by(3) {
+					normals.push([
+						mesh.normals[normal_i],
+						mesh.normals[normal_i + 1],
+						mesh.normals[normal_i + 2],
+						0.0
+					])
+				}
+			}			
+
+			let indices_end = indices.len() as u32; // used in a for loop for iterating over the triangles
+
+			Self {
+				pos,
+				col,
+				reflexivity,
+				diffuse_factor,
+				indices_start,
+				indices_end,
+			}
+		}
+
+		pub fn from_stl(name: &str, pos: [f32; 3], col: [f32; 4], reflexivity: f32, diffuse_factor: f32, vertices: &mut Vec<[f32; 4]>, indices: &mut Vec<[u32; 4]>, normals: &mut Vec<[f32; 4]>) -> Self {
+			let pos = [pos[0], pos[1], pos[2], 0.0];
+			let vertices_offset = vertices.len() as u32;
+			let indices_start = indices.len() as u32;
+	
 			let mut stl_file_reader = fs::File::open(name)
 				.expect(&format!("Failed to open {}", name));
 			let stl_file = stl_io::read_stl(&mut stl_file_reader)
 				.expect(&format!("Failed to read {}", name));
 			
-
+	
 			for vertex in stl_file.vertices {
 				vertices.push([
 					vertex[0],
@@ -104,18 +176,25 @@ pub mod model {
 					0.0
 				])
 			}
-
+	
 			for indexed_tri in stl_file.faces {
 				indices.push([
 					indexed_tri.vertices[0] as u32 + vertices_offset,
 					indexed_tri.vertices[1] as u32 + vertices_offset,
 					indexed_tri.vertices[2] as u32 + vertices_offset,
 					0
-				])
+				]);
+	
+				normals.push([
+					indexed_tri.normal[0],
+					indexed_tri.normal[1],
+					indexed_tri.normal[2],
+					0.0
+				]);
 			}
-
+	
 			let indices_end = indices.len() as u32; // used in a for loop for iterating over the triangles
-
+	
 			Self {
 				pos,
 				col,
