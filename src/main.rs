@@ -37,17 +37,19 @@ fn main() {
     let models: Vec<geom::model::Model> = vec![
         // geom::model::Model::new("STL/cube.stl", [-2.0, 0.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, &mut vertices, &mut indices),
         // geom::model::Model::from_stl("STL/cube.stl", [2.0, 0.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.1, 0.9, &mut vertices, &mut indices, &mut normals),
-        // geom::model::Model::from_obj("OBJ/cube.obj", [0.0, 0.0, 10.0], [1.0, 1.0, 1.0, 0.0], 0.5, 0.5, &mut vertices, &mut uvs, &mut indices, &mut normals)
-        geom::model::Model::from_obj("OBJ/tri.obj", [0.0, 0.0, 10.0], [1.0, 1.0, 1.0, 0.0], 0.5, 0.5, &mut vertices, &mut uvs, &mut indices, &mut normals)
+        geom::model::Model::from_obj("OBJ/cube_knuckles.obj", [0.0, 0.0, 10.0], [1.0, 1.0, 1.0, 0.0], 0.5, 0.5, 0, &mut vertices, &mut uvs, &mut indices, &mut normals),
+        // geom::model::Model::from_obj("OBJ/quad.obj", [0.0, 0.0, 10.0], [1.0, 1.0, 1.0, 0.0], 0.5, 0.5, &mut vertices, &mut uvs, &mut indices, &mut normals),
+        // geom::model::Model::from_obj("OBJ/tri.obj", [0.0, 3.0, 10.0], [1.0, 1.0, 1.0, 0.0], 0.5, 0.5, &mut vertices, &mut uvs, &mut indices, &mut normals),
         // geom::model::Model::new("STL/pyramid.stl", [-2.0, -1.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.9, 0.1, &mut vertices, &mut indices),
         // geom::model::Model::new("STL/monkey.stl", [0.0, 1.0, 8.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, &mut vertices, &mut indices),
-        // geom::model::Model::new("STL/ground.stl", [0.0, -1.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.0, 1.0, &mut vertices, &mut indices),
+        geom::model::Model::from_stl("STL/ground.stl", [0.0, -1.0, 10.0], [0.0, 1.0, 0.0, 1.0], 0.5, 0.5, -1, &mut vertices, &mut indices, &mut normals),
     ];
 
     dbg!(&models[0]);
     dbg!(&vertices);
     dbg!(&normals);
     dbg!(&indices);
+    dbg!(&uvs);
 
     dbg!(normals.len());
     dbg!(indices.len());
@@ -112,7 +114,7 @@ fn main() {
             util::build_cpu_buffer(_device.clone(), BufferUsage::all(), models).unwrap()
         };
 
-        let vertex_buffer = util::build_local_buffer(_device.clone(), _queue.clone(), BufferUsage::all(), vertices).unwrap();
+        let vertex_buffer = util::build_cpu_buffer(_device.clone(), BufferUsage::all(), vertices).unwrap();
         let uv_buffer = util::build_local_buffer(_device.clone(), _queue.clone(), BufferUsage::all(), uvs).unwrap();
         let indice_buffer = util::build_local_buffer(_device.clone(), _queue.clone(), BufferUsage::all(), indices).unwrap();
         let normal_buffer = util::build_local_buffer(_device.clone(), _queue.clone(), BufferUsage::all(), normals).unwrap();
@@ -131,7 +133,7 @@ fn main() {
 
         let dir_light_buffer = {
             let dir_lights: Vec::<light::DirectionalLight> = vec![
-                light::DirectionalLight::new(Vec3::new(0.0, -1.0, 0.0).normalize(), Vec3::new(1.0, 1.0, 1.0), 1.0),
+                light::DirectionalLight::new(Vec3::new(-1.0, -1.5, 1.3).normalize(), Vec3::new(1.0, 1.0, 1.0), 1.0),
                 // light::DirectionalLight::new(Vec3::new(-10.0, 10.0, 5.0), Vec3::new(0.0, 0.0, 1.0)),
             ];
 
@@ -139,7 +141,7 @@ fn main() {
         };
 
         let (base_texture_view, base_texture_sampler) = texture::load_texture("Images/blue.png", _device.clone(), _queue.clone());
-        let (bw_texture_view, bw_texture_sampler) = texture::load_texture("Images/grid.jpg", _device.clone(), _queue.clone());
+        let (bw_texture_view, bw_texture_sampler) = texture::load_texture("Images/UgandanKnuckles.png", _device.clone(), _queue.clone());
         
         let ds = PersistentDescriptorSet::start(_layout)
             .add_image(output_img_view).unwrap()
@@ -153,8 +155,8 @@ fn main() {
             .add_buffer(light_buffer.clone()).unwrap()
             .add_buffer(dir_light_buffer.clone()).unwrap()
             .enter_array().unwrap()
-            .add_sampled_image(base_texture_view.clone(), base_texture_sampler.clone()).unwrap()
             .add_sampled_image(bw_texture_view.clone(), bw_texture_sampler.clone()).unwrap()
+            .add_sampled_image(base_texture_view.clone(), base_texture_sampler.clone()).unwrap()
             .leave_array().unwrap()
             // .add_sampled_image(texture_view, sampler).unwrap()
             .build().unwrap();
@@ -212,11 +214,9 @@ fn main() {
                 },
                 event::Event::RedrawEventsCleared => { // Animation things
                     t += 0.001;
+                    let r = Quaternion::from_axis(Vec3::new(0.0, 1.0, 0.0), 0.001);
                     match sphere_buffer.write() {
                         Ok(mut sb) => {
-                            let r = Quaternion::from_axis(Vec3::new(0.0, 1.0, 0.0), 0.001);
-                            // let r = Quaternion::new(0.0, 0.0, 0.0, 1.0);
-
                             for i in 1..sb.len() {
                                 let mut pos = Vec3::new(sb[i].pos[0], sb[i].pos[1], sb[i].pos[2]);
                                 pos = r.transform_around(pos, [0.0, 0.0, 20.0].into());
@@ -241,6 +241,21 @@ fn main() {
                                 0.0
                             ];
                             */
+                        },
+                        _ => ()
+                    }
+
+                    match vertex_buffer.write() {
+                        Ok(mut vb) => {
+                            for i in 0..vb.len() {
+                                let tv = r.transform_point([vb[i][0], vb[i][1], vb[i][2]].into());
+                                vb[i] = [
+                                    tv.x,
+                                    tv.y,
+                                    tv.z,
+                                    0.0
+                                ];
+                            }
                         },
                         _ => ()
                     }
@@ -270,7 +285,6 @@ fn main() {
     shader_layout.add_buffer(0, false);
     shader_layout.add_buffer(0, false);
     shader_layout.add_sampled_image_array(0, 2, true);
-    // shader_layout.add_buffer(0, false);
     shader_layout.add_push_constant_range(0, 32);
 
     let shader = loader::Shader::load(canvas.device.clone(), "shader/ray3d.glsl", shader_layout)

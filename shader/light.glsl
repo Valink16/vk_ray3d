@@ -98,7 +98,8 @@ vec3 PointLights_to_Model(vec4 impact_point, Model closest_m, Ray r, uint tri_in
 
 		uint closest_mi;
 		uint _tri_index;
-		Ray_trace_to_Models(ray_to_light, closest_mi, _tri_index);
+		vec2 uv;
+		Ray_trace_to_Models(ray_to_light, closest_mi, _tri_index, uv);
 		
 		if (closest_mi == MODELS_LENGTH) { // Means no collisions detected, thus no shadow, so we need to compute the color for the current light
 			float to_light_sq_dist = dot(to_light, to_light);
@@ -139,7 +140,8 @@ vec3 PointLights_to_Model(vec4 impact_point, Model closest_m, Ray r, uint tri_in
 
 		uint closest_mi;
 		uint _tri_index;
-		Ray_trace_to_Models(ray_to_light, closest_mi, _tri_index);
+		vec2 uv;
+		Ray_trace_to_Models(ray_to_light, closest_mi, _tri_index, uv);
 		
 		if (closest_mi == MODELS_LENGTH) { // Means no collisions detected, thus no shadow, so we need to compute the color for the current light
 			float to_light_sq_dist = dot(to_light, to_light);

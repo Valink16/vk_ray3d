@@ -1,4 +1,6 @@
 #version 450
+#extension GL_EXT_debug_printf : enable
+
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 layout(set = 0, binding = 0) uniform writeonly image2D img;
 
@@ -25,6 +27,7 @@ struct Model {
     float diffuse_factor; // When computing reflections, factor of the added diffuse light to the incoming reflected light
     uint indices_start; // Index of the first indexed triangle of the model in the global indexed triangles array
     uint indices_end; // End of the indexed triangles
+    int texture_index;
 };
 
 struct PointLight {
@@ -172,15 +175,35 @@ void main() {
 
     uint closest_mi;
     uint closest_tri_index;
-    float closest_model_dist = Ray_trace_to_Models(r, closest_mi, closest_tri_index);
+    vec2 uv;
+    float closest_model_dist = Ray_trace_to_Models(r, closest_mi, closest_tri_index, uv);
 
     if (closest_mi != MODELS_LENGTH) {
         Model _mod = models[closest_mi];
 
         vec4 impact_point = r.origin + r.dir * closest_model_dist;
+
+        if (_mod.texture_index == -1) {
+            col.xyz = _mod.col.xyz;
+        } else {
+            uvec3 indexed_tri = indices[closest_tri_index];
+            vec2 tex_A = uvs[indexed_tri.x];
+            vec2 tex_B = uvs[indexed_tri.y];
+            vec2 tex_C = uvs[indexed_tri.z];
+
+            vec2 tex_AB = tex_B - tex_A;
+            vec2 tex_AC = tex_C - tex_A;
+
+            uv = tex_A + uv.x * tex_AB + uv.y * tex_AC;
+
+            col.xyz = Model_texture_value(_mod, uv);
+        }
+        
+        
+        // 3col.xyz += vec3(0.0, 0.0, 0.5);
         
         // col.xyz = _mod.col.xyz;
-        col.xyz = PointLights_to_Model(impact_point, _mod, r, closest_tri_index) * _mod.col.xyz * _mod.diffuse_factor;
+        col.xyz *= PointLights_to_Model(impact_point, _mod, r, closest_tri_index) * _mod.diffuse_factor;
         /*
         vec4 impact_points[REFLECT_DEPTH];
         uint impact_sindices[REFLECT_DEPTH];

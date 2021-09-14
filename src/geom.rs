@@ -85,10 +85,12 @@ pub mod model {
 		pub diffuse_factor: f32,
 		pub indices_start: u32, // Index of the first indexed triangle of the model in the global indexed triangles array
 		pub indices_end: u32, // End of the indexed triangles
+		pub texture_index: i32,
+		_pad: [u32; 3]
 	}
 
 	impl Model {
-		pub fn from_obj<P: AsRef<Path> + Debug>(name: P, pos: [f32; 3], col: [f32; 4], reflexivity: f32, diffuse_factor: f32, vertices: &mut Vec<[f32; 4]>, uvs: &mut Vec<[f32; 2]>,  indices: &mut Vec<[u32; 4]>, normals: &mut Vec<[f32; 4]>) -> Self {
+		pub fn from_obj<P: AsRef<Path> + Debug>(name: P, pos: [f32; 3], col: [f32; 4], reflexivity: f32, diffuse_factor: f32, texture_index: i32, vertices: &mut Vec<[f32; 4]>, uvs: &mut Vec<[f32; 2]>,  indices: &mut Vec<[u32; 4]>, normals: &mut Vec<[f32; 4]>) -> Self {
 			let pos = [pos[0], pos[1], pos[2], 0.0];
 			let vertices_offset = vertices.len() as u32;
 			let indices_start = indices.len() as u32;
@@ -96,7 +98,7 @@ pub mod model {
 			let (models, _mats)  = tobj::load_obj(&name,
 				&tobj::LoadOptions {
 					single_index: true,
-					triangulate: true,
+					// triangulate: true,
 					// reorder_data: true,
 					.. Default::default()
 				}
@@ -107,7 +109,6 @@ pub mod model {
 
 				assert_eq!(mesh.positions.len() % 3, 0);
 				assert_eq!(mesh.texcoords.len() % 2, 0);
-				assert_eq!(mesh.indices.len() % 3, 0);
 				assert_eq!(mesh.normals.len() % 3, 0);
 
 				for pos_i in (0..mesh.positions.len()).step_by(3) {
@@ -128,9 +129,9 @@ pub mod model {
 
 				for indice_i in (0..mesh.indices.len()).step_by(3) {
 					indices.push([
-						mesh.indices[indice_i],
-						mesh.indices[indice_i + 1],
-						mesh.indices[indice_i + 2],
+						mesh.indices[indice_i] + vertices_offset,
+						mesh.indices[indice_i + 1] + vertices_offset,
+						mesh.indices[indice_i + 2] + vertices_offset,
 						0
 					])
 				}
@@ -154,10 +155,12 @@ pub mod model {
 				diffuse_factor,
 				indices_start,
 				indices_end,
+				texture_index,
+				_pad: [0; 3]
 			}
 		}
 
-		pub fn from_stl(name: &str, pos: [f32; 3], col: [f32; 4], reflexivity: f32, diffuse_factor: f32, vertices: &mut Vec<[f32; 4]>, indices: &mut Vec<[u32; 4]>, normals: &mut Vec<[f32; 4]>) -> Self {
+		pub fn from_stl(name: &str, pos: [f32; 3], col: [f32; 4], reflexivity: f32, diffuse_factor: f32, texture_index: i32, vertices: &mut Vec<[f32; 4]>, indices: &mut Vec<[u32; 4]>, normals: &mut Vec<[f32; 4]>) -> Self {
 			let pos = [pos[0], pos[1], pos[2], 0.0];
 			let vertices_offset = vertices.len() as u32;
 			let indices_start = indices.len() as u32;
@@ -202,6 +205,8 @@ pub mod model {
 				diffuse_factor,
 				indices_start,
 				indices_end,
+				texture_index,
+				_pad: [0; 3]
 			}
 		}
 	}
