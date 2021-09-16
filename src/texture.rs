@@ -12,7 +12,7 @@ use vulkano::sync::GpuFuture;
 
 pub fn load_texture<P>(path: P, _device: Arc<Device>, _queue: Arc<Queue>) -> (Arc<ImageView<Arc<ImmutableImage<Format>>>>, Arc<Sampler>) 
 where P: AsRef<Path> {
-	let base_texture_image = image::open(path).unwrap().into_rgba8();
+	let base_texture_image = crate::image::open(path).unwrap().into_rgba8();
 	let (w, h) = base_texture_image.dimensions();
 	
 	println!("W: {}, H: {}", w, h);

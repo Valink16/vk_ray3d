@@ -1,5 +1,5 @@
 use crate::{util, loader};
-use vulkano::{descriptor::{DescriptorSet, descriptor_set::DescriptorSetDesc}, device::{Device, DeviceOwned, Queue}};
+use vulkano::{buffer::{BufferUsage, CpuAccessibleBuffer}, command_buffer::CommandBuffer, device::{Device, DeviceOwned, Queue}, image::{ImageCreateFlags, ImageDimensions}};
 use vulkano::instance::{Instance, ApplicationInfo};
 use vulkano::image::{StorageImage, ImageUsage, ImageAccess};
 use vulkano::format::{Format, ClearValue};
@@ -7,30 +7,36 @@ use vulkano::command_buffer::AutoCommandBufferBuilder;
 use vulkano::sampler::Filter;
 use vulkano::sync::GpuFuture;
 use vulkano::pipeline::{ComputePipeline, shader::SpecializationConstants};
-use vulkano::descriptor::{descriptor_set::UnsafeDescriptorSetLayout, PipelineLayoutAbstract};
+use vulkano::descriptor::{descriptor_set::UnsafeDescriptorSetLayout, PipelineLayoutAbstract, DescriptorSet, descriptor_set::DescriptorSetDesc};
 
 use vulkano::swapchain;
 use swapchain::{Swapchain, SwapchainCreationError, SurfaceTransform, PresentMode, FullscreenExclusive};
 
 use vulkano::sync;
 
+use image;
+use chrono;
 use vulkano_win::VkSurfaceBuild;
 use winit::window::WindowBuilder;
 use winit::event_loop::{EventLoop, ControlFlow};
-use winit::event::{Event, WindowEvent};
+use winit::event::{Event, WindowEvent, DeviceEvent, ElementState};
 use winit::dpi::PhysicalSize;
 
-use std::hash::Hash;
+use std::{future::Ready, hash::Hash};
 use std::sync::Arc;
 use std::time::Instant;
 use std::fmt::Debug;
+use std::fs;
+use std::path;
+use std::env::{current_dir, set_current_dir};
 
 // This class will manage the window and present the output of the compute shaders
-pub struct Canvas<Ds, Update, Pc: 'static, DsBuilder> where
+pub struct Canvas<Ds, Update, Resize, Pc: 'static, DsBuilder> where
 	Ds: DescriptorSet + DescriptorSetDesc + DeviceOwned + Eq + Hash + PartialEq + Send + Sync,
-	Update: FnMut(Option<&winit::event::Event<()>>) -> (Pc, bool),
+	Update: FnMut(Option<&winit::event::Event<()>>, f64) -> (Pc, bool),
+	Resize: FnMut(PhysicalSize<u32>, Arc<Device>, Arc<Queue>, Arc<UnsafeDescriptorSetLayout>) -> (Arc<Ds>, Arc<StorageImage<Format>>, [u32; 3], Update) + Clone,
 	Pc: SpecializationConstants + Copy + Debug,
-	DsBuilder: FnOnce(PhysicalSize<u32>, Arc<Device>, Arc<Queue>, Arc<UnsafeDescriptorSetLayout>) -> (Arc<Ds>, Arc<StorageImage<Format>>, [u32; 3], Update) + Clone { // DsBuilder is a closure which builds the DescriptorSet
+	DsBuilder: FnOnce(PhysicalSize<u32>, Arc<Device>, Arc<Queue>, Arc<UnsafeDescriptorSetLayout>) -> (Arc<Ds>, Arc<StorageImage<Format>>, [u32; 3], Update, Resize) + Clone { // DsBuilder is a closure which builds the DescriptorSet
 	// TODO: 
 	// - implement the class, must be able to create the window, manage events, draw output
 	// - take potential multiple compute shaders with their corresponding descriptor sets + input data + output texture
@@ -44,11 +50,12 @@ pub struct Canvas<Ds, Update, Pc: 'static, DsBuilder> where
 	pub shader: Option<loader::Shader>,
 }
 
-impl<Ds: 'static, Update: 'static, Pc, DsBuilder: 'static> Canvas<Ds, Update, Pc, DsBuilder> where 
+impl<Ds: 'static, Update: 'static, Resize: 'static, Pc, DsBuilder: 'static> Canvas<Ds, Update, Resize, Pc, DsBuilder> where 
 	Ds: DescriptorSet + DescriptorSetDesc + DeviceOwned + Eq + Hash + PartialEq + Send + Sync,
-	Update: FnMut(Option<&winit::event::Event<()>>) -> (Pc, bool),
+	Update: FnMut(Option<&winit::event::Event<()>>, f64) -> (Pc, bool),
+	Resize: FnMut(PhysicalSize<u32>, Arc<Device>, Arc<Queue>, Arc<UnsafeDescriptorSetLayout>) -> (Arc<Ds>, Arc<StorageImage<Format>>, [u32; 3], Update) + Clone,
 	Pc: SpecializationConstants + Copy + Debug,
-	DsBuilder: FnOnce(PhysicalSize<u32>, Arc<Device>, Arc<Queue>, Arc<UnsafeDescriptorSetLayout>) -> (Arc<Ds>, Arc<StorageImage<Format>>, [u32; 3], Update) + Clone {
+	DsBuilder: FnOnce(PhysicalSize<u32>, Arc<Device>, Arc<Queue>, Arc<UnsafeDescriptorSetLayout>) -> (Arc<Ds>, Arc<StorageImage<Format>>, [u32; 3], Update, Resize) + Clone {
 	
 	/// #### ds_builder closure arguments
 	/// - `PhysicalSize` representing the size of the swapchain and returning a tuple containing the descriptor set for the compute shader and the output image
@@ -64,8 +71,10 @@ impl<Ds: 'static, Update: 'static, Pc, DsBuilder: 'static> Canvas<Ds, Update, Pc
 	///			- `Option<winit::event::WindowEvent` The window event of the current frame
 	///		- return
 	///			- 'bool' rebuild, used to communicate whether ds_builder should be recalled or not
+	/// - `Rebuild` Closure - Used when window is resized to only update certain elements
 	/// #### Update closure arguments
 	/// - `Option<winit::event::Event>` Event passed to the closure so the user can update accordingly, needs to be passed back to avoid a weird winit bug (can't clone `Event`)
+	/// - `f64` "time" used to scale animations
 	/// #### Update closure return
 	/// - `Option<winit::event::Event<()>>` The same event as the one passed in
 	/// - `Pc` push_constant implementing the `SpecializationConstants` trait
@@ -87,7 +96,9 @@ impl<Ds: 'static, Update: 'static, Pc, DsBuilder: 'static> Canvas<Ds, Update, Pc
 		self.shader = Some(cs);
 	}
 
-	pub fn run(self) -> Result<(), String> { // Runs the event_loop
+	/// #### Arguments
+	/// - `animation_fps` target fps for animation, mainly defines how `t` passed to `update` closure is incremented
+	pub fn run(self, animation_fps: f64) -> Result<(), String> { // Runs the event_loop
 		let shader = match self.shader {
 			Some(s) => s,
 			None => return Err(String::from("The shader was not set"))
@@ -132,6 +143,7 @@ impl<Ds: 'static, Update: 'static, Pc, DsBuilder: 'static> Canvas<Ds, Update, Pc
 				color_space
 			).unwrap()
 		};
+
 		println!("Created swapchain with {} images using format {:?}", images.len(), swapchain.format());
 
 		// setting up the compute pipeline
@@ -144,7 +156,24 @@ impl<Ds: 'static, Update: 'static, Pc, DsBuilder: 'static> Canvas<Ds, Update, Pc
 
 		let layout = compute_pipeline.layout().descriptor_set_layout(0).unwrap().to_owned();
 
-		let (mut descriptor_set, mut output_img, mut dispatch, mut update) = (ds_builder.clone())(surface.window().inner_size(), device.clone(), queue.clone(), layout.clone());
+		let inner_size = surface.window().inner_size();
+		let (mut descriptor_set, mut output_img, mut dispatch, mut update, resize) = (ds_builder.clone())(inner_size, device.clone(), queue.clone(), layout.clone());
+		
+		let mut image_save_buffer = CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), false, // Buffer which will be used to save rendered images
+		(0 .. inner_size.width * inner_size.height * 4).map(|_| 255u8))
+			.expect("failed to create image_save_buffer");
+
+		let mut dest_image = images[0].clone(); // This arc will reference the image being rendered to every time
+		let mut save_image = StorageImage::with_usage( // Image which is potentially used to save on the disk
+			device.clone(), ImageDimensions::Dim2d { width: inner_size.width, height: inner_size.height, array_layers: 1 }, Format::R8G8B8A8Unorm,
+			ImageUsage {
+				transfer_source: true,
+				transfer_destination: true,
+				.. ImageUsage::none()
+			}, 
+			ImageCreateFlags::none(),
+			vec![queue.family()]
+		).unwrap();
 
 		let (mut dest_dim, mut output_dim, scale) = {
 			let _dest_dim = images[0].dimensions().width_height();
@@ -165,10 +194,15 @@ impl<Ds: 'static, Update: 'static, Pc, DsBuilder: 'static> Canvas<Ds, Update, Pc
 		let mut start = Instant::now();
 		let mut frames = 0;
 		let dt_log_rate = 300;
-		let (mut push_constants, mut need_update) = update(None);
+		let mut t = 0.0; // Global time for animation, passed to update closure
+		let (mut push_constants, mut need_update) = update(None, t);
+		let mut recording = false;
+		let mut current_frame = 0;
+		let root_folder = current_dir().unwrap();
+		let mut recording_path = root_folder.clone();
 
 		event_loop.run(move |ev: Event<()>, _, control_flow| {
-			let update_res = update(Some(&ev));
+			let update_res = update(Some(&ev), t);
 			push_constants = update_res.0;
 			need_update = update_res.1;
 
@@ -189,8 +223,38 @@ impl<Ds: 'static, Update: 'static, Pc, DsBuilder: 'static> Canvas<Ds, Update, Pc
 						}
 					}
 				}
+
+				Event::DeviceEvent { event, .. } => {
+					match event {
+						DeviceEvent::Key(kb_input) => {
+							if kb_input.state == ElementState::Released {
+								match kb_input.scancode {
+									1 => *control_flow = ControlFlow::Exit, // Escape
+									60 => { // F2, start or stop recording
+										if !recording {
+											recording = true;
+											let mut timestamp = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, false);
+											timestamp = timestamp.replace(":", "_");
+											println!("Using folder name: {}", timestamp);
+											recording_path = path::PathBuf::from(format!("Captures/{}", timestamp));
+											fs::create_dir_all(&recording_path).unwrap();
+											set_current_dir(&recording_path).unwrap();
+										} else {
+											recording = false;
+											set_current_dir(&root_folder).unwrap();
+										}
+									}
+									_ => ()
+								}
+							}
+						},
+						_ => ()
+					}
+				}
+				
 				Event::RedrawEventsCleared => {
 					frames += 1;
+					t += 1.0 / animation_fps;
 
 					if frames % dt_log_rate == 0 {
 						frames = 0;
@@ -201,8 +265,31 @@ impl<Ds: 'static, Update: 'static, Pc, DsBuilder: 'static> Canvas<Ds, Update, Pc
 
 					if minimized { return; } // Don't try anything if the window is minimized, this prevents the errors creating images with 0 sizes
 
+					
 					previous_frame_end.as_mut().unwrap().cleanup_finished();
-
+					if recording {
+						let mut builder = AutoCommandBufferBuilder::new(device.clone(), queue.family()).unwrap();
+						builder
+							.copy_image_to_buffer(save_image.clone(), image_save_buffer.clone()).unwrap();
+				
+						let cb = builder.build().unwrap();
+						let finished = cb.execute(queue.clone()).unwrap();
+				
+						finished
+							.then_signal_fence_and_flush().unwrap()
+							.wait(None).unwrap();
+				
+						let inner_size = save_image.dimensions();
+						let data = image_save_buffer.read().unwrap();
+						let to_save = image::ImageBuffer::<image::Rgba<u8>, _>::from_raw(inner_size.width(), inner_size.height(), &data[..]).unwrap();
+						to_save.save(format!("{}.png", current_frame)).unwrap();
+						current_frame += 1;
+			
+						if current_frame % (animation_fps as isize / 10) == 0 {
+							println!("Generated {} frames", current_frame);
+						}
+					}
+					
 					if resized { // Rebuild the output_img and the swapchain
 						resized = false;
 						let dimensions: [u32; 2] = surface.window().inner_size().into();
@@ -221,7 +308,24 @@ impl<Ds: 'static, Update: 'static, Pc, DsBuilder: 'static> Canvas<Ds, Update, Pc
 						let _dest_dim = images[0].dimensions();
 						let _output_dim = [(_dest_dim.width() as f32 / scale.0).floor() as u32, (_dest_dim.height() as f32 / scale.1).floor() as u32];
 						
-						let r = (ds_builder.clone())(surface.window().inner_size(), device.clone(), queue.clone(), layout.clone());
+						// let r = (ds_builder.clone())(surface.window().inner_size(), device.clone(), queue.clone(), layout.clone());
+						let inner_size = surface.window().inner_size();
+						let r = (resize.clone())(inner_size, device.clone(), queue.clone(), layout.clone());
+						
+						image_save_buffer = CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), false, // Buffer which will be used to save rendered images
+						(0 .. inner_size.width * inner_size.height * 4).map(|_| 255u8))
+							.expect("failed to create image_save_buffer");
+
+						save_image = StorageImage::with_usage( // Image which is potentially used to save on the disk
+							device.clone(), ImageDimensions::Dim2d { width: inner_size.width, height: inner_size.height, array_layers: 1 }, Format::R8G8B8A8Unorm,
+							ImageUsage {
+								transfer_source: true,
+								transfer_destination: true,
+								.. ImageUsage::none()
+							}, 
+							ImageCreateFlags::none(),
+							vec![queue.family()]
+						).unwrap();
 						
 						descriptor_set = r.0;
 						output_img = r.1;
@@ -245,7 +349,7 @@ impl<Ds: 'static, Update: 'static, Pc, DsBuilder: 'static> Canvas<Ds, Update, Pc
 						resized = true;
 					}
 					
-					let dest_image = images[swap_index].clone();
+					dest_image = images[swap_index].clone();
 
 					let mut cb_builder = AutoCommandBufferBuilder::primary(device.clone(), queue.family()).unwrap();
 					
@@ -253,18 +357,32 @@ impl<Ds: 'static, Update: 'static, Pc, DsBuilder: 'static> Canvas<Ds, Update, Pc
 						.clear_color_image(output_img.clone(), ClearValue::Float([0.0, 0.0, 0.0, 1.0])).unwrap()
 						.dispatch(dispatch, compute_pipeline.clone(), descriptor_set.clone(), push_constants, std::iter::empty()).unwrap()
 						.blit_image(
-								output_img.clone(),
-								[0, 0, 0],
-								output_dim,
-								0,
-								0,
-								dest_image,
-								[0, 0, 0],
-								dest_dim,
-								0,
-								0,
-								1,
-								Filter::Nearest
+							output_img.clone(),
+							[0, 0, 0],
+							output_dim,
+							0,
+							0,
+							save_image.clone(),
+							[0, 0, 0],
+							dest_dim,
+							0,
+							0,
+							1,
+							Filter::Nearest
+						).unwrap()
+						.blit_image(
+							output_img.clone(),
+							[0, 0, 0],
+							output_dim,
+							0,
+							0,
+							dest_image.clone(),
+							[0, 0, 0],
+							dest_dim,
+							0,
+							0,
+							1,
+							Filter::Nearest
 						).unwrap();
 
 					let cb = cb_builder.build().unwrap();

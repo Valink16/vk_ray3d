@@ -3,6 +3,7 @@
 // Rexporting, users should favor the rexports over getting their preferred version through cargo to insure compatibility
 pub extern crate vulkano;
 pub extern crate winit;
+pub extern crate image;
 pub mod loader;
 pub mod util;
 

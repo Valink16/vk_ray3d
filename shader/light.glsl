@@ -76,14 +76,20 @@ vec3 PointLights_to_Sphere(vec4 impact_point, Sphere closest_s, Ray r) {
 }
 
 // Returns the total quantity of light on a model using point_lights
-vec3 PointLights_to_Model(vec4 impact_point, Model closest_m, Ray r, uint tri_index) {
+vec3 PointLights_to_Model(vec4 impact_point, Model closest_m, Ray r, uint tri_index, vec2 uv) {
 	vec3 final_color = vec3(0.0);
 
 	// Compute normal with the triangle
-	vec3 AB = vertices[indices[tri_index][1]] - vertices[indices[tri_index][0]]; // B - A
-	vec3 AC = vertices[indices[tri_index][2]] - vertices[indices[tri_index][0]]; // C - A
-	vec4 normal = vec4(normalize(cross(AB, AC)), 0.0);
-	// vec4 normal = -vec4(normals[tri_index], 0.0);
+	// vec3 AB = vertices[indices[tri_index][1]] - vertices[indices[tri_index][0]]; // B - A
+	// vec3 AC = vertices[indices[tri_index][2]] - vertices[indices[tri_index][0]]; // C - A
+	// vec4 _normal = vec4(normalize(cross(AB, AC)), 0.0);
+
+	// vec4 normal = vec4((normals[indices[tri_index][0]] + normals[indices[tri_index][1]] + normals[indices[tri_index][2]]) / 3.0, 0.0); // Average normal
+	
+	vec4 normal = get_normal(tri_index, uv); // UV interpolated normal for smoooooth shading
+
+	// debugPrintfEXT("Cross n: (%f; %f; %f)", _normal.x, _normal.y, _normal.z);
+	// debugPrintfEXT("n: (%f; %f; %f)", normal.x, normal.y, normal.z);
 
 	impact_point += normal * RAY_COLLISION_PRECISION; // Shift the impact point a bit outward to limit the dotty effect
 

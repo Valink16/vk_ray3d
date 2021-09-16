@@ -70,7 +70,8 @@ pub mod sphere {
 }
 
 pub mod model {
-	use stl_io;
+	use compute_vk::vulkano::pipeline::vertex;
+use stl_io;
 	use tobj;
 	use std::fs;
 	use std::path::Path;
@@ -85,8 +86,10 @@ pub mod model {
 		pub diffuse_factor: f32,
 		pub indices_start: u32, // Index of the first indexed triangle of the model in the global indexed triangles array
 		pub indices_end: u32, // End of the indexed triangles
+		pub vertex_start: u32, // Index of the first vertex
+		pub vertex_end: u32, // Last vertex
 		pub texture_index: i32,
-		_pad: [u32; 3]
+		_pad: u32
 	}
 
 	impl Model {
@@ -155,12 +158,14 @@ pub mod model {
 				diffuse_factor,
 				indices_start,
 				indices_end,
+				vertex_start: vertices_offset,
+				vertex_end: vertices.len() as u32,
 				texture_index,
-				_pad: [0; 3]
+				_pad: 0
 			}
 		}
 
-		pub fn from_stl(name: &str, pos: [f32; 3], col: [f32; 4], reflexivity: f32, diffuse_factor: f32, texture_index: i32, vertices: &mut Vec<[f32; 4]>, indices: &mut Vec<[u32; 4]>, normals: &mut Vec<[f32; 4]>) -> Self {
+		pub fn from_stl(name: &str, pos: [f32; 3], col: [f32; 4], reflexivity: f32, diffuse_factor: f32, texture_index: i32, vertices: &mut Vec<[f32; 4]>, uvs: &mut Vec<[f32; 2]>, indices: &mut Vec<[u32; 4]>, normals: &mut Vec<[f32; 4]>) -> Self {
 			let pos = [pos[0], pos[1], pos[2], 0.0];
 			let vertices_offset = vertices.len() as u32;
 			let indices_start = indices.len() as u32;
@@ -170,30 +175,48 @@ pub mod model {
 			let stl_file = stl_io::read_stl(&mut stl_file_reader)
 				.expect(&format!("Failed to read {}", name));
 			
-	
+			normals.reserve(stl_file.vertices.len());
+
 			for vertex in stl_file.vertices {
 				vertices.push([
 					vertex[0],
-					vertex[2], // Swap y and z
 					vertex[1],
+					vertex[2],
 					0.0
-				])
+				]);
+
+				uvs.push([0.0, 0.0]);
 			}
 	
 			for indexed_tri in stl_file.faces {
-				indices.push([
+				let new_tri = [
 					indexed_tri.vertices[0] as u32 + vertices_offset,
 					indexed_tri.vertices[1] as u32 + vertices_offset,
 					indexed_tri.vertices[2] as u32 + vertices_offset,
 					0
-				]);
-	
-				normals.push([
-					indexed_tri.normal[0],
-					indexed_tri.normal[1],
-					indexed_tri.normal[2],
-					0.0
-				]);
+				];
+
+				// This assures compatibility with per-vertex-normal formats(Wavefront)
+				// Essentially copy the normal of the indexed_triangle for each of it's vertices
+				for i in new_tri.iter() {
+					let v = vertices[*i as usize];
+					let vi = vertices.iter().position(|&_v| _v == v).unwrap();
+
+					if vi >= normals.len() {
+						for j in 0..=(vi - normals.len()) { // grow the normals vector
+							normals.push([0.0; 4]);
+						}
+					}
+
+					normals[vi] = [
+						indexed_tri.normal[0],
+						indexed_tri.normal[1],
+						indexed_tri.normal[2],
+						0.0
+					];
+				}
+					
+				indices.push(new_tri);
 			}
 	
 			let indices_end = indices.len() as u32; // used in a for loop for iterating over the triangles
@@ -205,8 +228,10 @@ pub mod model {
 				diffuse_factor,
 				indices_start,
 				indices_end,
+				vertex_start: vertices_offset,
+				vertex_end: vertices.len() as u32,
 				texture_index,
-				_pad: [0; 3]
+				_pad: 0
 			}
 		}
 	}

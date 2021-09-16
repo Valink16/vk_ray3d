@@ -106,3 +106,35 @@ float Ray_trace_to_Models(Ray r, out uint closest_mi, out uint closest_tri_index
 vec3 Model_texture_value(Model m, vec2 uv) {
     return texture(textures[m.texture_index], uv).xyz;
 }
+
+vec3 get_color(Model m, uint tri_index, vec2 uv) {
+	if (m.texture_index == -1) {
+		return m.col.xyz;
+	} else {
+		uvec3 indexed_tri = indices[tri_index];
+		vec2 tex_A = uvs[indexed_tri.x];
+		vec2 tex_B = uvs[indexed_tri.y];
+		vec2 tex_C = uvs[indexed_tri.z];
+
+		vec2 tex_AB = tex_B - tex_A;
+		vec2 tex_AC = tex_C - tex_A;
+
+		vec2 tex_uv = tex_A + uv.x * tex_AB + uv.y * tex_AC;
+		return Model_texture_value(m, tex_uv);
+	}
+}
+
+vec4 get_normal(uint tri_index, vec2 uv) {
+	/*
+	vec3 n_A = normals[indices[tri_index][0]];
+	vec3 n_B = normals[indices[tri_index][1]];
+	vec3 n_C = normals[indices[tri_index][2]];
+	return vec4(n_A + (n_B - n_A) * uv.x + (n_C - n_A) * uv.y, 0.0); // UV interpolated normal for smoooooth shading
+	*/
+
+	// Compute normal with the triangle
+	vec3 AB = vertices[indices[tri_index][1]] - vertices[indices[tri_index][0]]; // B - A
+	vec3 AC = vertices[indices[tri_index][2]] - vertices[indices[tri_index][0]]; // C - A
+	vec4 normal = vec4(normalize(cross(AB, AC)), 0.0);
+	return normal;
+}

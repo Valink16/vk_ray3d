@@ -78,3 +78,38 @@ pub fn generate() {
 }
 
 */
+
+pub struct RayGen {
+	size: PhysicalSize<u32>,
+	depth: f32
+}
+
+impl RayGen {
+	pub fn new(size: PhysicalSize<u32>, fov: f32) -> Self {
+		let fov = fov / 2.0;
+		Self {
+			size,
+			depth: (fov.cos() * size.width as f32) / (2.0 * fov.sin()) // Trigo properties
+		}
+	}
+
+	pub fn generate(&self) -> Vec<Ray> {
+		let len = self.size.width * self.size.height;
+		let mut rays = Vec::<Ray>::with_capacity(len as usize);
+		
+		for i in 0..len {
+			let x = (i % self.size.width) as f32 - (self.size.width as f32 / 2.0);
+			let y = -((i / self.size.width) as f32 - (self.size.height as f32 / 2.0));
+
+			let norm = (x * x + y * y + self.depth * self.depth).sqrt();
+			let dir = [x / norm, y / norm, self.depth / norm, 0.0];
+		
+			rays.push(Ray {
+				origin: [0.0, 0.0, 0.0, 0.0],
+				dir,
+			});
+		}
+
+		rays
+	}
+}

@@ -27,6 +27,8 @@ struct Model {
     float diffuse_factor; // When computing reflections, factor of the added diffuse light to the incoming reflected light
     uint indices_start; // Index of the first indexed triangle of the model in the global indexed triangles array
     uint indices_end; // End of the indexed triangles
+    uint vertex_start;
+    uint vertex_end;
     int texture_index;
 };
 
@@ -106,9 +108,6 @@ void main() {
     vec4 col = vec4(0.0, 0.0, 0.0, 1.0);
 
     /*
-    uint closest_si;
-    float closest_d = Ray_trace_to_Spheres(r, closest_si);
-
     if (closest_si != SPHERES_LENGTH) {
         // The following arrays store the data about the reflection to then bactrace from the last impact and find the final color
         vec4 impact_points[REFLECT_DEPTH];
@@ -173,42 +172,137 @@ void main() {
     }
     */
 
+    uint closest_si;
+    float closest_sphere_dist = Ray_trace_to_Spheres(r, closest_si);
+
     uint closest_mi;
     uint closest_tri_index;
     vec2 uv;
     float closest_model_dist = Ray_trace_to_Models(r, closest_mi, closest_tri_index, uv);
 
+    if (closest_si != SPHERES_LENGTH || closest_mi != MODELS_LENGTH) {
+        vec4 impact_points[REFLECT_DEPTH];
+        uint impact_sindices[REFLECT_DEPTH];
+        uint impact_mindices[REFLECT_DEPTH];
+        float impact_distances[REFLECT_DEPTH];
+        
+        uint tri_indices[REFLECT_DEPTH]; // Stores the triangle index for each reflection
+        vec2 current_uvs[REFLECT_DEPTH];
+
+        float closest_dist = 0;
+        vec4 normal;
+
+        if (closest_sphere_dist < closest_model_dist) {
+            closest_dist = closest_sphere_dist;
+            impact_sindices[0] = closest_si;
+            impact_mindices[0] = MODELS_LENGTH; // Invalidates this index for the Models
+            impact_points[0] = r.origin + r.dir * closest_dist;
+            normal = get_normal(spheres[impact_sindices[0]], impact_points[0]);
+            col.xyz = get_color(spheres[impact_mindices[0]], impact_points[0]);
+        } else {
+            closest_dist = closest_model_dist;
+            normal = get_normal(closest_tri_index, uv);
+            impact_mindices[0] = closest_mi;
+            impact_sindices[0] = SPHERES_LENGTH; // Invalidates this index for the Spheres
+            tri_indices[0] = closest_tri_index;
+            current_uvs[0] = uv;
+            impact_points[0] = r.origin + r.dir * closest_dist;
+            col.xyz = get_color(models[closest_mi], closest_tri_index, uv);
+        }
+
+        impact_distances[0] = closest_dist; // We choose arbitrarily to ignore the camera
+
+        r.origin = impact_points[0] + normal * RAY_COLLISION_PRECISION;
+        r.dir = reflect(r.dir, normal); // Used to iterate through reflections
+
+        int i; // So we can keep track of when the for loop stopped for later
+        for (i = 1; i < REFLECT_DEPTH; i++) {
+            closest_sphere_dist = Ray_trace_to_Spheres(r, closest_si);
+            closest_model_dist = Ray_trace_to_Models(r, closest_mi, closest_tri_index, uv);
+
+            if (closest_si != SPHERES_LENGTH || closest_mi != MODELS_LENGTH) {
+                if (closest_sphere_dist < closest_model_dist) {
+                    closest_dist = closest_sphere_dist;
+                    normal = get_normal(spheres[closest_si], impact_points[i]);
+                    impact_sindices[i] = closest_si;
+                    impact_mindices[i] = MODELS_LENGTH; // Invalidates this index for the spheres
+                } else {
+                    closest_dist = closest_model_dist;
+                    normal = get_normal(closest_tri_index, uv);
+                    impact_mindices[i] = closest_mi;
+                    tri_indices[i] = closest_tri_index;
+                    current_uvs[i] = uv;
+                    impact_sindices[i] = SPHERES_LENGTH; // Invalidates this index for the models
+                }
+
+                impact_points[i] = r.origin + r.dir * closest_dist;
+                
+                r.origin = impact_points[i] + normal * RAY_COLLISION_PRECISION; // New origin is the impact point
+                r.dir = reflect(r.dir, normal); // Used to iterate through reflections
+
+            } else {
+                break;
+            }
+        }
+
+        if (i > 0) {
+            --i; // or index out of range
+
+            // Determinate using impact_sindices and impact_mindices which of the two to use for the base reflected color
+            vec3 reflected_color;
+            if (impact_sindices[i] == SPHERES_LENGTH) { // Spheres unvalidated, take color from models
+                Model _mod = models[impact_mindices[i]];
+                vec3 c = get_color(_mod, tri_indices[i], current_uvs[i]);
+                reflected_color = PointLights_to_Model(impact_points[i], _mod, r, tri_indices[i], current_uvs[i]) * c * _mod.diffuse_factor;
+            } else { // Models unvalidated, take color from spheres
+                Sphere _sph = spheres[impact_sindices[i]];
+                reflected_color = PointLights_to_Sphere(impact_points[i], _sph, r) * get_color(_sph, impact_points[i]) * _sph.diffuse_factor;
+            }
+
+            for (int a = i - 1; a >= 0; a--) {
+                vec3 added_diffuse_color;
+                if (impact_sindices[a] == SPHERES_LENGTH) { // Spheres unvalidated, take color from models
+                    Model _mod = models[impact_mindices[a]];
+                    vec3 c = get_color(_mod, tri_indices[a], current_uvs[a]);
+                    reflected_color *= c * _mod.reflexivity;
+                    added_diffuse_color = PointLights_to_Model(impact_points[a], _mod, r, tri_indices[a], current_uvs[a]) * c * _mod.diffuse_factor; // Add diffused light
+                } else { // Models unvalidated, take color from spheres
+                    Sphere _sph = spheres[impact_sindices[a]];
+                    vec3 c = get_color(_sph, impact_points[a]);
+                    reflected_color *= c * _sph.reflexivity;
+                    added_diffuse_color = (PointLights_to_Sphere(impact_points[a], _sph, r) * c * _sph.diffuse_factor); // Add diffused light
+                }
+
+                float impact_dist = impact_distances[a + 1];
+                float df = min(1.0, 1 / (impact_dist * impact_dist));
+                reflected_color *= df;
+                reflected_color += added_diffuse_color;
+            }
+
+            // float last_df = 1 / (impact_distances[0] * impact_distances[0]);
+            col = vec4(reflected_color, 1.0);
+            // col = texture(textures[0], vec2(0.05, 0.05));
+        }
+    }
+
+    /*
     if (closest_mi != MODELS_LENGTH) {
         Model _mod = models[closest_mi];
 
-        vec4 impact_point = r.origin + r.dir * closest_model_dist;
-
-        if (_mod.texture_index == -1) {
-            col.xyz = _mod.col.xyz;
-        } else {
-            uvec3 indexed_tri = indices[closest_tri_index];
-            vec2 tex_A = uvs[indexed_tri.x];
-            vec2 tex_B = uvs[indexed_tri.y];
-            vec2 tex_C = uvs[indexed_tri.z];
-
-            vec2 tex_AB = tex_B - tex_A;
-            vec2 tex_AC = tex_C - tex_A;
-
-            uv = tex_A + uv.x * tex_AB + uv.y * tex_AC;
-
-            col.xyz = Model_texture_value(_mod, uv);
-        }
+        col.xyz = get_color(_mod, closest_tri_index, uv);
         
+        vec4 impact_point = r.origin + r.dir * closest_model_dist;
         
         // 3col.xyz += vec3(0.0, 0.0, 0.5);
         
         // col.xyz = _mod.col.xyz;
-        col.xyz *= PointLights_to_Model(impact_point, _mod, r, closest_tri_index) * _mod.diffuse_factor;
-        /*
+        // col.xyz *= PointLights_to_Model(impact_point, _mod, r, uv, closest_tri_index) * _mod.diffuse_factor;
+        
         vec4 impact_points[REFLECT_DEPTH];
-        uint impact_sindices[REFLECT_DEPTH];
+        uint impact_mindices[REFLECT_DEPTH];
         uint tri_indices[REFLECT_DEPTH]; // Stores the triangle index for each reflection
         float impact_distances[REFLECT_DEPTH];
+        vec2 current_uvs[REFLECT_DEPTH];
 
         Model closest_m = models[closest_mi];
         
@@ -218,34 +312,36 @@ void main() {
         // vec3 AB = vertices[indices[closest_tri_index][1]] - vertices[indices[closest_tri_index][0]]; // B - A
         // vec3 AC = vertices[indices[closest_tri_index][2]] - vertices[indices[closest_tri_index][0]]; // C - A
         // vec4 normal = vec4(normalize(cross(AC, AB)), 0.0);
-        vec4 normal = vec4(normals[closest_tri_index], 0.0);
+        vec4 normal = vec4(get_normal(closest_tri_index, uv), 0.0);
 
         r.origin = impact_point;
         r.dir = reflect(r.dir, normal); // Used to iterate through reflections
         impact_points[0] = impact_point;
-        impact_sindices[0] = closest_mi;
+        impact_mindices[0] = closest_mi;
         tri_indices[0] = closest_tri_index;
         impact_distances[0] = closest_model_dist; // We choose arbitrarily to ignore the camera
+        current_uvs[0] = uv;
         float total_distance = closest_model_dist;
 
         int i; // So we can keep track of when the for loop stopped for later
         for (i = 1; i < REFLECT_DEPTH; i++) {
-            closest_model_dist = Ray_trace_to_Models(r, closest_mi, closest_tri_index);
+            closest_model_dist = Ray_trace_to_Models(r, closest_mi, closest_tri_index, uv);
             
             if (closest_mi == MODELS_LENGTH) { // No collision, so stop the loop, because the ray "goes" into infinity
                 break;
             }
 
             impact_points[i] = r.origin + r.dir * closest_model_dist;
-            impact_sindices[i] = closest_mi;
+            impact_mindices[i] = closest_mi;
             tri_indices[i] = closest_tri_index;
             impact_distances[i] = closest_model_dist;
+            current_uvs[i] = uv;
             total_distance += closest_model_dist;
             
             // AB = vertices[indices[closest_tri_index][1]] - vertices[indices[closest_tri_index][0]]; // B - A
             // AC = vertices[indices[closest_tri_index][2]] - vertices[indices[closest_tri_index][0]]; // C - A
             // normal = vec4(normalize(cross(AC, AB)), 0.0);
-            normal = vec4(normals[closest_tri_index], 0.0);
+            normal = vec4(get_normal(closest_tri_index, uv), 0.0);
 
             r.origin = impact_points[i] + normal * RAY_COLLISION_PRECISION; // New origin is the impact point
             r.dir = reflect(r.dir, normal); // Used to iterate through reflections
@@ -255,27 +351,29 @@ void main() {
         if (i > 0) {
             --i; // or index out of range
 
-            Model _mod = models[impact_sindices[i]];
-            vec3 reflected_color = PointLights_to_Model(impact_points[i], _mod, r, tri_indices[i]) * _mod.col.xyz * _mod.diffuse_factor;
+            Model _mod = models[impact_mindices[i]];
+            vec3 c = get_color(_mod, tri_indices[i], current_uvs[i]);
+            vec3 reflected_color = PointLights_to_Model(impact_points[i], _mod, r, tri_indices[i], current_uvs[i]) * c * _mod.diffuse_factor;
 
             for (int a = i - 1; a >= 0; a--) {
-                _mod = models[impact_sindices[a]];
+                _mod = models[impact_mindices[a]];
                 // vec3 dif = PointLights_to_Model(impact_points[a], _mod, r, closest_tri_index) * _mod.diffuse_factor;
                 
-                float impact_dist = impact_distances[a + 1]; // 
+                float impact_dist = impact_distances[a + 1];
                 if (impact_dist < 0.8) {
                     impact_dist = 0.8;
                 }
 
                 float df = 1 / (impact_dist * impact_dist);
 
-                reflected_color *= _mod.col.xyz * _mod.reflexivity * df;
-                reflected_color += PointLights_to_Model(impact_points[a], _mod, r, tri_indices[a]) * _mod.col.xyz * _mod.diffuse_factor; // Add diffused light
+                vec3 col = get_color(_mod, tri_indices[a], current_uvs[a]);
+                reflected_color *= col * _mod.reflexivity * df;
+                reflected_color += PointLights_to_Model(impact_points[a], _mod, r, tri_indices[a], current_uvs[a]) * col * _mod.diffuse_factor; // Add diffused light
             }
             col = vec4(reflected_color, 1.0);
         }
-        */
     }
+    */
     
     imageStore(img, ivec2(gl_GlobalInvocationID.xy), col);
 }
