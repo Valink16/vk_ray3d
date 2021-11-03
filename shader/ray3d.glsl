@@ -17,7 +17,7 @@ struct Sphere {
     float r;
     float reflexivity; // When computing reflections, factor of the incoming light reflected
     float diffuse_factor; // When computing reflections, factor of the added diffuse light to the incoming reflected light
-    uint texture_index;
+    int texture_index;
 };
 
 struct Model {

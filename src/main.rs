@@ -44,9 +44,9 @@ fn main() {
         // geom::model::Model::from_stl("STL/cube.stl", [2.0, 0.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.1, 0.9, &mut vertices, &mut indices, &mut normals),
         // geom::model::Model::from_obj("OBJ/cube.obj", [2.0, 0.0, 10.0], [1.0, 1.0, 1.0, 0.0], 0.5, 0.5, 0, &mut vertices, &mut uvs, &mut indices, &mut normals),
         // geom::model::Model::from_obj("OBJ/cube.obj", [-5.0, 0.0, 10.0], [1.0, 1.0, 1.0, 0.0], 0.5, 0.5, -1, &mut vertices, &mut uvs, &mut indices, &mut normals),
-        geom::model::Model::from_obj("OBJ/sphere.obj", [-5.0, 0.0, 10.0], [1.0, 1.0, 1.0, 0.0], 0.5, 0.5, -1, &mut vertices, &mut uvs, &mut indices, &mut normals),
+        // geom::model::Model::from_obj("OBJ/uv_sphere.obj", [0.0, 0.0, 3.0], [1.0, 1.0, 1.0, 0.0], 0.5, 0.5, -1, &mut vertices, &mut uvs, &mut indices, &mut normals),
         // geom::model::Model::from_obj("OBJ/quad.obj", [0.0, 0.0, 10.0], [1.0, 1.0, 1.0, 0.0], 0.5, 0.5, &mut vertices, &mut uvs, &mut indices, &mut normals),
-        // geom::model::Model::from_obj("OBJ/earth.obj", [0.0, 0.0, 10.0], [1.0, 1.0, 1.0, 0.0], 0.5, 0.5, 1, &mut vertices, &mut uvs, &mut indices, &mut normals),
+        // geom::model::Model::from_obj("OBJ/earth.obj", [0.0, 0.0, 10.0], [1.0, 1.0, 1.0, 0.0], 0.5, 0.5, -1, &mut vertices, &mut uvs, &mut indices, &mut normals),
         // geom::model::Model::from_obj("OBJ/tri.obj", [0.0, 3.0, 10.0], [1.0, 1.0, 1.0, 0.0], 0.5, 0.5, &mut vertices, &mut uvs, &mut indices, &mut normals),
         // geom::model::Model::new("STL/pyramid.stl", [-2.0, -1.0, 10.0], [1.0, 1.0, 1.0, 1.0], 0.9, 0.1, &mut vertices, &mut indices),
         // geom::model::Model::new("STL/monkey.stl", [0.0, 1.0, 8.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, &mut vertices, &mut indices),
@@ -87,17 +87,17 @@ fn main() {
         };
 
         let sphere_buffer = {
-            let mut spheres = vec![
-                Sphere::new([0.0, 0.0, 10.0], [0.0, 0.0, 1.0, 1.0], 2.0, 0.5, 0.5, 0),
+            let mut spheres: Vec<Sphere> = vec![
+                Sphere::new([0.0, 0.0, 20.0], [0.0, 0.0, 1.0, 1.0], 2.0, 0.5, 0.5, 1),
             ];
 
-            /*
-            let s = 10;
-            for i in 0..s {
-                let angle = i as f32 * (2.0 * PI / s as f32);
-                spheres.push(Sphere::new([angle.cos() * 4.0, 0.0, angle.sin() * 4.0 + 20.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, 0.5, 1));
-            }
-            */
+            
+            // let s = 10;
+            // for i in 0..s {
+            //     let angle = i as f32 * (2.0 * PI / s as f32);
+            //     spheres.push(Sphere::new([angle.cos() * 4.0, 0.0, angle.sin() * 4.0 + 20.0], [1.0, 1.0, 1.0, 1.0], 0.5, 0.5, 0.5, -1));
+            // }
+            
     
             util::build_cpu_buffer(_device.clone(), bu, spheres).unwrap()
         };
@@ -114,7 +114,7 @@ fn main() {
         let light_buffer = {
             let lights: Vec::<light::PointLight> = vec![
                 // light::PointLight::new(Vec3::new(0.0, 10.0, 10.0), Vec3::new(1.0, 1.0, 1.0), 3.0),
-                light::PointLight::new(Vec3::new(-15.0, 10.0, 0.0), Vec3::new(1.0, 1.0, 1.0), 200.0),
+                // light::PointLight::new(Vec3::new(-15.0, 10.0, 0.0), Vec3::new(1.0, 1.0, 1.0), 200.0),
                 // light::PointLight::new(Vec3::new(-20.0, 0.0, 10.0), Vec3::new(1.0, 1.0, 1.0), 200.0),
                 // light::PointLight::new(Vec3::new(0.0, 10.0, 5.0), Vec3::new(0.0, 0.0, 1.0), 20.0),
                 // light::PointLight::new(Vec3::new(10.0, 10.0, 10.0), Vec3::new(0.0, 1.0, 0.0), 100.0),
@@ -125,9 +125,9 @@ fn main() {
 
         let dir_light_buffer = {
             let dir_lights: Vec::<light::DirectionalLight> = vec![
-                light::DirectionalLight::new(Vec3::new(-1.0, -1.5, 1.3).normalize(), Vec3::new(1.0, 0.0, 1.0), 1.0),
-                light::DirectionalLight::new(Vec3::new(0.0, 0.0, 1.0).normalize(), Vec3::new(1.0, 1.0, 1.0), 1.0),
-                light::DirectionalLight::new(Vec3::new(0.0, 0.0, -1.0).normalize(), Vec3::new(1.0, 1.0, 1.0), 1.0),
+                // light::DirectionalLight::new(Vec3::new(-1.0, -1.5, 1.3).normalize(), Vec3::new(1.0, 0.0, 1.0), 1.0),
+                light::DirectionalLight::new(Vec3::new(0.0, -1.0, 0.0).normalize(), Vec3::new(1.0, 1.0, 1.0), 1.0),
+                // light::DirectionalLight::new(Vec3::new(0.0, 0.0, -1.0).normalize(), Vec3::new(1.0, 1.0, 1.0), 1.0),
             ];
 
             util::build_cpu_buffer(_device.clone(), bu, dir_lights).unwrap()
@@ -256,43 +256,43 @@ fn main() {
                             _ => ()
                         }
 
-                        match mb.read() {
-                            Ok(_mb) => {
-                                let start = _mb[0].vertex_start as usize;
-                                let end = _mb[0].vertex_end as usize;
+                        // match mb.read() {
+                        //     Ok(_mb) => {
+                        //         let start = _mb[0].vertex_start as usize;
+                        //         let end = _mb[0].vertex_end as usize;
 
-                                match (vb.write()) {
-                                    Ok(mut _vb) => {
-                                        for i in start..end {
-                                            let tv = r.transform_around([_vb[i][0], _vb[i][1], _vb[i][2]].into(), [0.0, 0.0, 0.0].into());
-                                            _vb[i] = [
-                                                tv.x,
-                                                tv.y,
-                                                tv.z,
-                                                0.0
-                                            ];
-                                        }
-                                    },
-                                    _ => ()
-                                }
+                        //         match (vb.write()) {
+                        //             Ok(mut _vb) => {
+                        //                 for i in start..end {
+                        //                     let tv = r.transform_around([_vb[i][0], _vb[i][1], _vb[i][2]].into(), [0.0, 0.0, 0.0].into());
+                        //                     _vb[i] = [
+                        //                         tv.x,
+                        //                         tv.y,
+                        //                         tv.z,
+                        //                         0.0
+                        //                     ];
+                        //                 }
+                        //             },
+                        //             _ => ()
+                        //         }
 
-                                match nb.write() {
-                                    Ok(mut _nb) => {
-                                        for i in start..end {
-                                            let tn = r.transform_around([_nb[i][0], _nb[i][1], _nb[i][2]].into(), [0.0, 0.0, 0.0].into());
-                                            _nb[i] = [
-                                                tn.x,
-                                                tn.y,
-                                                tn.z,
-                                                0.0
-                                            ];
-                                        }
-                                    },
-                                    _ => ()
-                                }
-                            }
-                            _ => ()
-                        }                        
+                        //         match nb.write() {
+                        //             Ok(mut _nb) => {
+                        //                 for i in start..end {
+                        //                     let tn = r.transform_around([_nb[i][0], _nb[i][1], _nb[i][2]].into(), [0.0, 0.0, 0.0].into());
+                        //                     _nb[i] = [
+                        //                         tn.x,
+                        //                         tn.y,
+                        //                         tn.z,
+                        //                         0.0
+                        //                     ];
+                        //                 }
+                        //             },
+                        //             _ => ()
+                        //         }
+                        //     }
+                        //     _ => ()
+                        // }                        
                     },
                     _ => (),
                 }

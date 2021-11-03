@@ -7,11 +7,11 @@ pub mod sphere {
 		pub r: f32,
 		pub reflexivity: f32,
 		pub diffuse_factor: f32,
-		pub texture_index: u32,
+		pub texture_index: i32,
 	}
 
 	impl Sphere {
-		pub fn new(pos: [f32; 3], col: [f32; 4], r: f32, reflexivity: f32, diffuse_factor: f32, texture_index: u32) -> Self {
+		pub fn new(pos: [f32; 3], col: [f32; 4], r: f32, reflexivity: f32, diffuse_factor: f32, texture_index: i32) -> Self {
 			let pos = [pos[0], pos[1], pos[2], 0.0];
 			Self {
 				pos,

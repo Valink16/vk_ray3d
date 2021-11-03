@@ -125,12 +125,12 @@ vec3 get_color(Model m, uint tri_index, vec2 uv) {
 }
 
 vec4 get_normal(uint tri_index, vec2 uv) {
-	/*
-	vec3 n_A = normals[indices[tri_index][0]];
-	vec3 n_B = normals[indices[tri_index][1]];
-	vec3 n_C = normals[indices[tri_index][2]];
-	return vec4(n_A + (n_B - n_A) * uv.x + (n_C - n_A) * uv.y, 0.0); // UV interpolated normal for smoooooth shading
-	*/
+	
+	// vec3 n_A = normals[indices[tri_index][0]];
+	// vec3 n_B = normals[indices[tri_index][1]];
+	// vec3 n_C = normals[indices[tri_index][2]];
+	// return vec4(n_A + (n_B - n_A) * uv.x + (n_C - n_A) * uv.y, 0.0); // UV interpolated normal for smoooooth shading
+	
 
 	// Compute normal with the triangle
 	vec3 AB = vertices[indices[tri_index][1]] - vertices[indices[tri_index][0]]; // B - A

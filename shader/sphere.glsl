@@ -40,18 +40,40 @@ float Ray_trace_to_Spheres(Ray r, out uint closest_si) {
     return closest_d;
 }
 
+vec2 point_to_geo(vec4 point, Sphere s) {
+    vec3 sphereNormal = normalize(point - s.pos).xyz;
+            
+    vec3 northVector = vec3(0, 1, 0);
+    vec3 eastVector  = vec3(1, 0, 0);
+    
+    vec3 vertPoint = sphereNormal;
+    
+    float lat = acos(dot(northVector, sphereNormal));
+    float v = lat / PI;
+    float u;
+    
+    float lon = (acos( dot( vertPoint, eastVector) / sin(lat))) / (2.0 * PI);
+    if(dot(cross(northVector, eastVector), vertPoint) > 0.0){
+        u = lon;
+    }
+    else{
+        u = 1.0 - lon;
+    }
+
+    return vec2(-u, v);
+}
+
 vec3 get_color(Sphere s, vec4 impact_point) {
     // Computing U, V coordinates for the sphere, https://en.wikipedia.org/wiki/UV_mapping
     if (s.texture_index != -1) {
-        vec4 d = normalize(s.pos - impact_point);
-        float u = 0.5 + atan(d.x, d.z);
-        float v = 0.5 - asin(d.y);
+        vec2 uv = point_to_geo(impact_point, s);
 
-        return texture(textures[s.texture_index], vec2(u, v)).xyz;
+        return texture(textures[s.texture_index], uv).xyz;
     }
     return s.col.xyz;
 }
 
 vec4 get_normal(Sphere s, vec4 impact_point) {
-    return impact_point - s.pos;
+    vec4 normal = normalize(impact_point - s.pos);
+    return normal;
 }
